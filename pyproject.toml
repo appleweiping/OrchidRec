@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orchidrec"
-version = "0.1.0"
+version = "0.2.0"
 description = "A dependency-free toolkit for reproducible recommendation experiments"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "OrchidRec contributors" }]
+authors = [{ name = "Weiping Yan" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",

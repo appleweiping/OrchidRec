@@ -8,11 +8,11 @@ OrchidRec is a compact, independent toolkit for reproducible offline
 recommendation experiments. It runs on Python 3.11 or newer and has **no
 runtime dependencies outside the Python standard library**.
 
-It is intentionally small enough to read end to end while still providing a
-complete experimental path: strict interaction validation, deterministic ID
-mapping, three train/test split strategies, three recommenders, seen-item
-filtering, six ranking metrics, JSON configuration, portable model state, a
-runner, and a command-line interface.
+It is intentionally inspectable while providing a complete experimental path:
+strict interaction validation, local MovieLens adapters, content fingerprints,
+deterministic ID mapping, three train/test split strategies, three
+recommenders, six ranking metrics, user bootstrap intervals, paired model
+comparisons, portable JSON model state, and JSON/CSV/standalone-HTML reports.
 
 ## Quick start
 
@@ -31,11 +31,90 @@ example instead:
 orchidrec run examples/config.json
 ```
 
+To exercise the shared-split benchmark runner on the checked-in synthetic
+example:
+
+```bash
+orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchmark
+```
+
+Open `artifacts/benchmark/benchmark.html` directly in a browser; it has no
+external scripts, fonts, or network requests.
+
+## Real MovieLens benchmark
+
+OrchidRec does not download or redistribute MovieLens. Download either
+MovieLens 100K or MovieLens 1M from the official
+[GroupLens dataset page](https://grouplens.org/datasets/movielens/) yourself,
+read its license/readme, and extract it locally. The adapters accept either the
+ratings file or its containing directory:
+
+```bash
+orchidrec dataset-summary /datasets/ml-100k --format movielens-100k --minimum-rating 4
+orchidrec dataset-summary /datasets/ml-1m --format movielens-1m --minimum-rating 4
+```
+
+The 100K adapter reads `u.data` (`user<TAB>item<TAB>rating<TAB>timestamp`);
+the 1M adapter reads `ratings.dat` (`user::item::rating::timestamp`). Parsing
+is strict: malformed fields, out-of-range ratings, duplicate user-item rows,
+blank records, and non-ASCII ratings data fail with a line-specific error.
+Ratings at or above the configured threshold become unit-valued positive
+events; ratings below it are counted as dropped, not interpreted as explicit
+negatives.
+
+Create `movielens-benchmark.json`:
+
+```json
+{
+  "schema_version": 1,
+  "seed": 2026,
+  "data": {
+    "path": "/datasets/ml-100k",
+    "format": "movielens-100k",
+    "minimum_rating": 4
+  },
+  "split": {"method": "leave_one_out", "test_ratio": 0.2},
+  "evaluation": {
+    "k": 10,
+    "exclude_seen": true,
+    "bootstrap_samples": 1000,
+    "confidence": 0.95
+  },
+  "models": [
+    {"label": "popularity", "name": "popularity", "params": {"weighted": false}},
+    {"label": "item-knn", "name": "item_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
+    {"label": "bpr-mf", "name": "implicit_mf", "params": {"factors": 16, "epochs": 5}}
+  ]
+}
+```
+
+Then run:
+
+```bash
+orchidrec benchmark movielens-benchmark.json --output-dir artifacts/ml-100k
+```
+
+The output directory contains:
+
+- `benchmark.json`: the complete versioned result, effective model parameters,
+  dataset/split/config SHA-256 fingerprints, timings, intervals, and pairwise
+  statistics;
+- `benchmark.csv`: tidy rows suitable for a spreadsheet or downstream
+  analysis; and
+- `benchmark.html`: an offline dashboard showing estimates, uncertainty, and
+  every pairwise comparison.
+
+Absolute data paths are deliberately excluded from the semantic configuration
+fingerprint. Identical bytes at two locations therefore identify the same
+experiment. The report retains only the source filename, byte hash, normalized
+interaction hash, counts, rating range, and timestamp range.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[JSON interactions] --> B[Validation and immutable dataset]
+    A[JSON or local MovieLens ratings] --> B[Strict adapter and immutable dataset]
+    B --> B2[Source and normalized SHA-256]
     B --> C[Stable user and item ID maps]
     C --> D{Split strategy}
     D -->|random| E[Train / test]
@@ -48,8 +127,9 @@ flowchart LR
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
     H --> J[Coverage Novelty]
-    I --> K[Deterministic JSON report]
+    I --> K[User bootstrap and paired comparisons]
     J --> K
+    K --> M[JSON / tidy CSV / standalone HTML]
     F --> L[Versioned JSON model]
 ```
 
@@ -57,6 +137,8 @@ The modules have deliberately narrow responsibilities:
 
 - `data.py` validates events and maps string/integer IDs to deterministic
   contiguous indices.
+- `datasets.py` strictly parses local datasets and records content-addressed
+  provenance without downloading data.
 - `split.py` partitions events without dropping or duplicating records.
 - `models/` owns fitting, scoring, Top-K ranking, cold-start fallback, and
   versioned serialization.
@@ -66,6 +148,12 @@ The modules have deliberately narrow responsibilities:
   file location.
 - `experiment.py` joins the pieces without adding wall-clock timestamps or
   other nondeterministic report fields.
+- `benchmark.py` fits multiple models on exactly one split and one shared
+  bootstrap resampling plan.
+- `statistics.py` provides deterministic percentile intervals and paired mean
+  comparisons independently of the recommender classes.
+- `reporting.py` atomically writes strict JSON, tidy CSV, and self-contained
+  HTML artifacts.
 - `cli.py` exposes the runner and saved models to shell workflows.
 
 ## Interaction data
@@ -178,6 +266,21 @@ entries, and recommendations outside the declared catalog are validation
 errors instead of being silently counted—even when the invalid entry appears
 beyond the requested cutoff.
 
+### Uncertainty and paired comparisons
+
+The benchmark runner resamples evaluated users with replacement using a local
+seeded generator. For every resample it recomputes all six aggregates,
+including the union-based catalog coverage and recommendation-weighted
+novelty. The JSON report records percentile confidence intervals around each
+point estimate.
+
+Every model pair uses the same resampled user indices. Differences are
+reported as `right - left`, together with their percentile interval, the
+bootstrap probability that the right model is better, and a finite-sample
+corrected exploratory two-sided p-value. These values quantify uncertainty in
+this particular offline sample; they are not a substitute for multiple-test
+correction, online experiments, or a causal claim.
+
 ## Experiment configuration
 
 ```json
@@ -216,6 +319,8 @@ orchidrec run CONFIG
 orchidrec demo [--output-dir DIRECTORY]
 orchidrec inspect MODEL
 orchidrec recommend MODEL USER_ID [--k K] [--include-seen]
+orchidrec dataset-summary DATA --format FORMAT [--minimum-rating RATING]
+orchidrec benchmark CONFIG [--output-dir DIRECTORY]
 ```
 
 `USER_ID` accepts a JSON scalar. `42` is an integer ID, `"42"` is a string ID,
@@ -253,26 +358,48 @@ hyperparameters, catalog, seen-item state, and fitted numeric state. Loading is
 strict: unknown fields, invalid IDs, bad dimensions, non-finite numbers, and an
 unsupported version are rejected. It does not execute serialized code.
 
+For a programmatic real-data benchmark:
+
+```python
+from orchidrec import load_benchmark_config, run_benchmark
+from orchidrec.reporting import save_benchmark_reports
+
+config = load_benchmark_config("movielens-benchmark.json")
+result = run_benchmark(config)
+paths = save_benchmark_reports(result, "artifacts/ml-100k")
+print(result.dataset.interactions_sha256, paths.html_path)
+```
+
 ## Reproducibility contract
 
 For the same validated input order, configuration, and supported Python
-runtime, OrchidRec guarantees deterministic partitions, ID maps, sampling,
-tie-breaking, reports, and serialized key/order layout. Floating-point values
-can still differ at the final bits across unusual hardware or Python math
-implementations; comparisons across platforms should use tolerances.
+runtime, OrchidRec guarantees deterministic partitions, ID maps, model-local
+sampling, bootstrap resamples, tie-breaking, fingerprints, metric estimates,
+and serialized key/order layout. Floating-point values can still differ at the
+final bits across unusual hardware or Python math implementations; comparisons
+across platforms should use tolerances.
 
-The runner deliberately excludes elapsed time, current time, host names, and
-random run IDs from reports. It never changes Python's process-global random
-state.
+The single-model runner deliberately excludes elapsed time, current time, host
+names, and random run IDs. The benchmark runner records measured fit and
+recommendation seconds because performance comparison requires them; timings
+are observational and are the only intentionally nondeterministic result
+fields. Neither runner changes Python's process-global random state.
 
 ## Scope and limitations
 
-- Input is currently JSON, held in memory, and intended for experimentation.
+- Data and model state are held in memory; the adapters are not streaming ETL.
 - Feedback is positive/implicit; zero and negative values are rejected.
+- MovieLens rating thresholding discards lower ratings rather than learning
+  from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration and ImplicitMF uses simple SGD,
-  not optimized native kernels.
+  not optimized native kernels. Full MovieLens 1M runs can therefore be slow.
 - There is no feature store, distributed execution, online serving layer, or
   hyperparameter search.
+- Offline holdout metrics assume unobserved items are candidates and do not
+  correct for exposure/selection bias. Bootstrap intervals treat users as the
+  resampling unit and do not model temporal or social dependence.
+- Recorded wall-clock timing depends on the host, Python build, background
+  load, and filesystem cache. Compare timing only under a controlled protocol.
 - Saved JSON models can be large. Validate file provenance and apply ordinary
   resource limits when loading untrusted inputs.
 
@@ -288,12 +415,15 @@ python -m unittest discover -s tests -v
 coverage run -m unittest discover -s tests && coverage report
 python -m compileall -q src tests examples
 orchidrec demo --output-dir artifacts/smoke
+orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchmark-smoke
 python -m build
 ```
 
 The test suite covers validation failures, deterministic splitting and
 training, ranking semantics, all metrics, strict configuration, serialization
-tampering, CLI exit behavior, and end-to-end runs for every included model.
+tampering, MovieLens format failures, content hashes, deterministic bootstrap
+statistics, paired comparisons, portable report formats, CLI exit behavior,
+and end-to-end runs for every included model.
 See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes.
 
 ## Algorithm reference

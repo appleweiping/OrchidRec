@@ -42,6 +42,7 @@ python -m unittest discover -s tests -v
 coverage run -m unittest discover -s tests && coverage report
 python -m compileall -q src tests examples
 python -m orchidrec demo --output-dir artifacts/contributor-smoke
+orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchmark-smoke
 ruff check src tests examples
 mypy src
 python -m build

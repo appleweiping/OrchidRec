@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use OrchidRec in research, please cite this software."
+title: "OrchidRec: Reproducible Offline Recommendation Experiments"
+type: software
+authors:
+  - family-names: "Yan"
+    given-names: "Weiping"
+    alias: "appleweiping"
+version: 0.2.0
+date-released: 2026-08-31
+license: MIT
+repository-code: "https://github.com/appleweiping/OrchidRec"
+url: "https://github.com/appleweiping/OrchidRec"
+abstract: >-
+  A dependency-free Python toolkit for leakage-aware recommendation experiments,
+  collaborative filtering, ranking evaluation, and reproducible reports.

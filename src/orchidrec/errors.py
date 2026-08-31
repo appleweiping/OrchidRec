@@ -23,3 +23,7 @@ class SerializationError(OrchidRecError, ValueError):
 
 class ConfigurationError(OrchidRecError, ValueError):
     """Raised when an experiment configuration is invalid."""
+
+
+class DatasetError(OrchidRecError, ValueError):
+    """Raised when an external dataset cannot be decoded without ambiguity."""

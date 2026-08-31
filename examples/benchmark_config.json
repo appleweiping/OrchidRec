@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "seed": 2026,
+  "data": {
+    "path": "interactions.json",
+    "format": "orchidrec-json",
+    "minimum_rating": null
+  },
+  "split": {
+    "method": "leave_one_out",
+    "test_ratio": 0.2
+  },
+  "evaluation": {
+    "k": 3,
+    "exclude_seen": true,
+    "bootstrap_samples": 20,
+    "confidence": 0.9
+  },
+  "models": [
+    {
+      "label": "popularity",
+      "name": "popularity",
+      "params": {"weighted": false}
+    },
+    {
+      "label": "item-knn",
+      "name": "item_knn",
+      "params": {"neighbors": 5, "shrinkage": 1.0}
+    },
+    {
+      "label": "bpr-mf",
+      "name": "implicit_mf",
+      "params": {"factors": 4, "epochs": 3, "negative_samples": 1}
+    }
+  ]
+}

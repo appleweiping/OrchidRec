@@ -7,8 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from orchidrec import __version__
 from orchidrec.cli import main
 from orchidrec.demo import run_demo
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class CliTests(unittest.TestCase):
@@ -18,6 +21,13 @@ class CliTests(unittest.TestCase):
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = main(list(arguments))
         return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_version_uses_package_version(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as stopped:
+            main(["--version"])
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(stdout.getvalue(), f"orchidrec {__version__}\n")
 
     def test_demo_command_runs_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -116,6 +126,62 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertEqual(stdout, "")
             self.assertIn("finite number", stderr)
+
+    def test_dataset_summary_validates_local_movielens_file(self) -> None:
+        code, stdout, stderr = self.invoke(
+            "dataset-summary",
+            str(FIXTURES / "movielens-100k"),
+            "--format",
+            "movielens-100k",
+            "--minimum-rating",
+            "4",
+        )
+        payload = json.loads(stdout)
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["retained_interactions"], 17)
+        self.assertEqual(len(payload["source_sha256"]), 64)
+
+    def test_benchmark_command_writes_three_report_formats(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "benchmark-config.json"
+            output_dir = Path(directory) / "reports"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "seed": 3,
+                        "data": {
+                            "path": str(FIXTURES / "movielens-100k"),
+                            "format": "movielens-100k",
+                            "minimum_rating": 4,
+                        },
+                        "evaluation": {"k": 3, "bootstrap_samples": 3},
+                        "models": [
+                            {"label": "pop", "name": "popularity"},
+                            {"label": "knn", "name": "item_knn", "params": {"neighbors": 2}},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            code, stdout, stderr = self.invoke(
+                "benchmark", str(config_path), "--output-dir", str(output_dir)
+            )
+            payload = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(len(payload["models"]), 2)
+            for path in payload["reports"].values():
+                self.assertTrue(Path(path).is_file())
+
+    def test_dataset_summary_error_is_a_domain_exit(self) -> None:
+        code, stdout, stderr = self.invoke(
+            "dataset-summary", "missing.data", "--format", "movielens-1m"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("does not exist", stderr)
 
 
 if __name__ == "__main__":

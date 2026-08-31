@@ -8,12 +8,17 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from orchidrec import __version__
+from orchidrec.benchmark import run_benchmark
+from orchidrec.benchmark_config import load_benchmark_config
 from orchidrec.config import load_config
 from orchidrec.data import EntityId, validate_entity_id
+from orchidrec.datasets import load_dataset
 from orchidrec.demo import run_demo
 from orchidrec.errors import OrchidRecError, ValidationError
 from orchidrec.experiment import run_experiment
 from orchidrec.models import load_model
+from orchidrec.reporting import save_benchmark_reports
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -21,6 +26,7 @@ def _parser() -> argparse.ArgumentParser:
         prog="orchidrec",
         description="Run dependency-free, reproducible recommendation experiments.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run = subparsers.add_parser("run", help="run a JSON experiment configuration")
@@ -37,6 +43,23 @@ def _parser() -> argparse.ArgumentParser:
     recommend.add_argument("user_id", help="JSON scalar ID, for example 42 or \"alice\"")
     recommend.add_argument("--k", type=int, default=10)
     recommend.add_argument("--include-seen", action="store_true")
+
+    benchmark = subparsers.add_parser(
+        "benchmark", help="compare configured models on one shared split"
+    )
+    benchmark.add_argument("config", type=Path)
+    benchmark.add_argument("--output-dir", type=Path, default=Path("artifacts/benchmark"))
+
+    dataset_summary = subparsers.add_parser(
+        "dataset-summary", help="validate and fingerprint a local dataset"
+    )
+    dataset_summary.add_argument("path", type=Path)
+    dataset_summary.add_argument(
+        "--format",
+        required=True,
+        choices=("orchidrec-json", "movielens-100k", "movielens-1m"),
+    )
+    dataset_summary.add_argument("--minimum-rating", type=float)
     return parser
 
 
@@ -93,6 +116,31 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ensure_ascii=False,
                 )
             )
+            return 0
+        if args.command == "benchmark":
+            benchmark_result = run_benchmark(load_benchmark_config(args.config))
+            report_paths = save_benchmark_reports(benchmark_result, args.output_dir)
+            summary: dict[str, object] = {
+                "reports": report_paths.to_dict(),
+                "dataset": benchmark_result.dataset.to_dict(),
+                "models": [
+                    {
+                        "label": model.label,
+                        "metrics": model.metrics.to_dict(),
+                        "timing": model.timing.to_dict(),
+                    }
+                    for model in benchmark_result.models
+                ],
+            }
+            print(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False))
+            return 0
+        if args.command == "dataset-summary":
+            loaded = load_dataset(
+                args.path,
+                format=args.format,
+                minimum_rating=args.minimum_rating,
+            )
+            print(json.dumps(loaded.summary.to_dict(), indent=2, sort_keys=True))
             return 0
         parser.error(f"unknown command: {args.command}")
     except OrchidRecError as exc:

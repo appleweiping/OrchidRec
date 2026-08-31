@@ -2,3 +2,4 @@ include CONTRIBUTING.md
 include CHANGELOG.md
 include SECURITY.md
 recursive-include examples *.json *.py
+recursive-include tests/fixtures *.data *.dat *.md

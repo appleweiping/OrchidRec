@@ -29,6 +29,9 @@ jobs:
       - name: Run installed CLI smoke test
         run: orchidrec demo --output-dir artifacts/ci-demo
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Run shared-split benchmark smoke test
+        run: orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/ci-benchmark
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Install quality tools
         run: python -m pip install ".[dev]"
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'

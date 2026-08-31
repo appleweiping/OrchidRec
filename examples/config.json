@@ -1,0 +1,25 @@
+{
+  "seed": 2026,
+  "data": {
+    "path": "interactions.json"
+  },
+  "split": {
+    "method": "leave_one_out",
+    "test_ratio": 0.2
+  },
+  "model": {
+    "name": "item_knn",
+    "params": {
+      "neighbors": 4,
+      "shrinkage": 1.0
+    }
+  },
+  "evaluation": {
+    "k": 3,
+    "exclude_seen": true
+  },
+  "output": {
+    "model_path": "../artifacts/example/model.json",
+    "report_path": "../artifacts/example/report.json"
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {"user_id": "u1", "item_id": "a", "value": 1.0, "timestamp": 1.0},
+  {"user_id": "u1", "item_id": "b", "value": 1.0, "timestamp": 2.0},
+  {"user_id": "u1", "item_id": "c", "value": 1.0, "timestamp": 3.0},
+  {"user_id": "u2", "item_id": "a", "value": 1.0, "timestamp": 4.0},
+  {"user_id": "u2", "item_id": "c", "value": 1.0, "timestamp": 5.0},
+  {"user_id": "u2", "item_id": "d", "value": 1.0, "timestamp": 6.0},
+  {"user_id": "u3", "item_id": "b", "value": 1.0, "timestamp": 7.0},
+  {"user_id": "u3", "item_id": "c", "value": 1.0, "timestamp": 8.0},
+  {"user_id": "u3", "item_id": "e", "value": 1.0, "timestamp": 9.0},
+  {"user_id": "u4", "item_id": "a", "value": 1.0, "timestamp": 10.0},
+  {"user_id": "u4", "item_id": "d", "value": 1.0, "timestamp": 11.0},
+  {"user_id": "u4", "item_id": "e", "value": 1.0, "timestamp": 12.0},
+  {"user_id": "u5", "item_id": "c", "value": 1.0, "timestamp": 13.0},
+  {"user_id": "u5", "item_id": "e", "value": 1.0, "timestamp": 14.0},
+  {"user_id": "u5", "item_id": "f", "value": 1.0, "timestamp": 15.0},
+  {"user_id": "u6", "item_id": "d", "value": 1.0, "timestamp": 16.0},
+  {"user_id": "u6", "item_id": "f", "value": 1.0, "timestamp": 17.0},
+  {"user_id": "u6", "item_id": "a", "value": 1.0, "timestamp": 18.0}
+]

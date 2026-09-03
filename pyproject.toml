@@ -25,6 +25,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
+  "bandit>=1.7",
   "build>=1.2",
   "coverage>=7.6",
   "mypy>=1.15",
@@ -63,3 +64,14 @@ omit = ["*/orchidrec/__main__.py"]
 [tool.coverage.report]
 fail_under = 90
 show_missing = true
+
+[tool.bandit]
+targets = ["src"]
+# B311: OrchidRec seeds `random.Random(seed)` deliberately so splits, bootstrap
+# resampling and model initialisation are reproducible. There is no security or
+# cryptographic surface in this package; switching to `secrets` would break the
+# determinism the experiments depend on.
+# B615: matches on the *name* `load_dataset`, but `orchidrec.datasets.load_dataset`
+# is a local, standard-library-only reader for on-disk files. This package has no
+# Hugging Face dependency, so there is no revision to pin.
+skips = ["B311", "B615"]

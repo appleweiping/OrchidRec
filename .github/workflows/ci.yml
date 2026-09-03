@@ -39,6 +39,8 @@ jobs:
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: mypy src
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: bandit -q -c pyproject.toml -r src
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: coverage run -m unittest discover -s tests && coverage report
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: python -m build

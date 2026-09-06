@@ -12,6 +12,7 @@ from typing import Any
 from orchidrec._json import strict_json_loads
 from orchidrec._numeric import safe_float
 from orchidrec.errors import ConfigurationError, ValidationError
+from orchidrec.propensity import DEFAULT_EXPONENT, DEFAULT_MINIMUM_PROPENSITY
 
 
 def _object(value: object, name: str) -> Mapping[str, Any]:
@@ -24,6 +25,17 @@ def _unknown(mapping: Mapping[str, Any], allowed: set[str], name: str) -> None:
     extras = set(mapping) - allowed
     if extras:
         raise ConfigurationError(f"unknown {name} fields: {', '.join(sorted(extras))}")
+
+
+def _unit_float(value: object, name: str, *, minimum: float, maximum: float) -> float:
+    """Validate a bounded real configuration number without accepting booleans."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigurationError(f"{name} must be a real number")
+    number = safe_float(value)
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        raise ConfigurationError(f"{name} must be between {minimum} and {maximum}")
+    return number
 
 
 def _positive_int(value: object, name: str) -> int:
@@ -50,9 +62,23 @@ class ModelConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ExposureConfig:
+    """Parameters of the popularity exposure model used for correction.
+
+    Declaring this asks for exposure-corrected metrics alongside the ordinary
+    ones. Leaving it out asks for no exposure model at all, which is a claim
+    about the data rather than a default worth hiding.
+    """
+
+    exponent: float = DEFAULT_EXPONENT
+    minimum: float = DEFAULT_MINIMUM_PROPENSITY
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationConfig:
     k: int = 10
     exclude_seen: bool = True
+    exposure: ExposureConfig | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +106,18 @@ class ExperimentConfig:
             "data": {"path": str(self.data.path)},
             "split": {"method": self.split.method, "test_ratio": self.split.test_ratio},
             "model": {"name": self.model.name, "params": dict(self.model.params)},
-            "evaluation": {"k": self.evaluation.k, "exclude_seen": self.evaluation.exclude_seen},
+            "evaluation": {
+                "k": self.evaluation.k,
+                "exclude_seen": self.evaluation.exclude_seen,
+                "exposure": (
+                    None
+                    if self.evaluation.exposure is None
+                    else {
+                        "exponent": self.evaluation.exposure.exponent,
+                        "minimum": self.evaluation.exposure.minimum,
+                    }
+                ),
+            },
             "output": {
                 "report_path": str(self.output.report_path) if self.output.report_path else None,
                 "model_path": str(self.output.model_path) if self.output.model_path else None,
@@ -154,11 +191,31 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         raise ConfigurationError(f"invalid model.params for {model_name}: {exc}") from exc
 
     evaluation = _object(root.get("evaluation", {}), "evaluation")
-    _unknown(evaluation, {"k", "exclude_seen"}, "evaluation")
+    _unknown(evaluation, {"k", "exclude_seen", "exposure"}, "evaluation")
     k = _positive_int(evaluation.get("k", 10), "evaluation.k")
     exclude_seen = evaluation.get("exclude_seen", True)
     if not isinstance(exclude_seen, bool):
         raise ConfigurationError("evaluation.exclude_seen must be a boolean")
+    raw_exposure = evaluation.get("exposure")
+    if raw_exposure is None:
+        exposure = None
+    else:
+        exposure_fields = _object(raw_exposure, "evaluation.exposure")
+        _unknown(exposure_fields, {"exponent", "minimum"}, "evaluation.exposure")
+        exposure = ExposureConfig(
+            exponent=_unit_float(
+                exposure_fields.get("exponent", DEFAULT_EXPONENT),
+                "evaluation.exposure.exponent",
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            minimum=_unit_float(
+                exposure_fields.get("minimum", DEFAULT_MINIMUM_PROPENSITY),
+                "evaluation.exposure.minimum",
+                minimum=1e-6,
+                maximum=1.0,
+            ),
+        )
 
     output = _object(root.get("output", {}), "output")
     _unknown(output, {"report_path", "model_path"}, "output")
@@ -177,7 +234,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         data=DataConfig(path=resolved_data),
         split=SplitConfig(method=split_method, test_ratio=numeric_ratio),
         model=ModelConfig(name=model_name, params=dict(params)),
-        evaluation=EvaluationConfig(k=k, exclude_seen=exclude_seen),
+        evaluation=EvaluationConfig(k=k, exclude_seen=exclude_seen, exposure=exposure),
         output=OutputConfig(report_path=optional_path("report_path"), model_path=optional_path("model_path")),
     )
 

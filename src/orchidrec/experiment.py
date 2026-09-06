@@ -19,7 +19,9 @@ from orchidrec.models import (
     Recommendation,
     save_model,
 )
+from orchidrec.propensity import popularity_exposure
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
+from orchidrec.unbiased import UnbiasedMetricReport, evaluate_unbiased_ranking
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +55,10 @@ class ExperimentResult:
     catalog_size: int
     metrics: MetricReport
     users: tuple[UserEvaluation, ...]
+    unbiased_metrics: UnbiasedMetricReport | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": 1,
             "seed": self.seed,
             "split": self.split_method,
@@ -71,6 +74,12 @@ class ExperimentResult:
             "metrics": self.metrics.to_dict(),
             "users": [user.to_dict() for user in self.users],
         }
+        # Additive in the strict sense: the section appears only for a run that
+        # configured an exposure model, so a configuration that does not ask for
+        # one keeps exactly the report it produced before.
+        if self.unbiased_metrics is not None:
+            payload["unbiased_metrics"] = self.unbiased_metrics.to_dict()
+        return payload
 
     def save_json(self, path: str | Path) -> None:
         destination = Path(path)
@@ -173,6 +182,18 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         split.train.item_counts(),
         config.evaluation.k,
     )
+    unbiased_metrics = None
+    if config.evaluation.exposure is not None:
+        # Popularity comes from the training split alone. Estimating exposure
+        # from the test split would let the holdout explain its own sampling.
+        exposure = popularity_exposure(
+            split.train.item_counts(),
+            exponent=config.evaluation.exposure.exponent,
+            minimum=config.evaluation.exposure.minimum,
+        )
+        unbiased_metrics = evaluate_unbiased_ranking(
+            recommendation_ids, relevant, exposure, config.evaluation.k
+        )
     model_parameters = dict(model.to_state()["parameters"])
     result = ExperimentResult(
         seed=config.seed,
@@ -186,6 +207,7 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         catalog_size=len(model.catalog),
         metrics=metrics,
         users=tuple(user_rows),
+        unbiased_metrics=unbiased_metrics,
     )
     if config.output.model_path is not None:
         save_model(model, config.output.model_path)

@@ -267,6 +267,58 @@ entries, and recommendations outside the declared catalog are validation
 errors instead of being silently counted—even when the invalid entry appears
 beyond the requested cutoff.
 
+### Exposure-corrected metrics (optional)
+
+The metrics above count a hit whenever a recommended item appears in the
+holdout. That treats the holdout as a random sample of relevance, which it is
+not: it is what a previous system chose to show, and previous systems show
+popular items far more often. A popularity ranker therefore scores well partly
+for agreeing with whatever produced the log.
+
+Declaring an exposure model asks for a second set of metrics that weight each
+observed interaction by the inverse of its propensity, so a rarely-exposed item
+counts for more when it does appear:
+
+```json
+"evaluation": {"k": 10, "exposure": {"exponent": 0.75, "minimum": 0.01}}
+```
+
+`exponent` says how strongly popularity is believed to drive exposure. At `0`
+every item is equally likely to be observed and the correction is the identity,
+which is the honest way to state "no exposure model"; at `1` propensity is taken
+to be proportional to popularity. The default follows Yang et al., *Unbiased
+Offline Recommender Evaluation for Missing-Not-At-Random Implicit Feedback*
+(RecSys 2018), which takes `p` proportional to `n ** ((eta + 1) / 2)` at
+`eta = 0.5`. Propensities are estimated from **training** popularity only;
+estimating them from the holdout would let it explain its own sampling.
+
+`minimum` is a floor on the propensity. Inverse weights are otherwise unbounded,
+so one barely-exposed item can dominate an estimate; the floor trades a bounded
+bias for a bounded variance, and the report says how many observations sat on
+it.
+
+Two properties make the corrected numbers reviewable rather than merely
+different. They are normalized over the whole population rather than per user,
+because a per-user ratio cannot correct anything: for a user with a single
+observed interaction it is `w / w` on a hit and `0 / w` on a miss, so the weight
+cancels exactly — and strong exposure bias is precisely the regime where most
+users have one observed interaction. They therefore estimate a *micro*-averaged
+quantity, an average over interactions, while the metrics above average over
+users; the two differ even with no correction at all, so evaluate under
+`uniform_exposure` to get the like-for-like uncorrected baseline.
+
+Every corrected report carries `effective_sample_size`, the Kish effective
+sample size of its weights as a fraction of the observations. Inverse weighting
+concentrates an estimate on rarely-observed items, and an estimate resting on a
+few heavily weighted observations is not more trustworthy than the biased one it
+replaced — it is differently untrustworthy. A value near `1` means the weights
+are nearly uniform; a small value means a handful of observations decide the
+answer.
+
+The section appears in the report only for a run that configured an exposure
+model, so a configuration that does not ask for one keeps exactly the report it
+produced before.
+
 ### Uncertainty and paired comparisons
 
 The benchmark runner resamples evaluated users with replacement using a local
@@ -293,7 +345,7 @@ correction, online experiments, or a causal claim.
     "name": "item_knn",
     "params": {"neighbors": 40, "shrinkage": 10.0}
   },
-  "evaluation": {"k": 10, "exclude_seen": true},
+  "evaluation": {"k": 10, "exclude_seen": true, "exposure": null},
   "output": {
     "model_path": "artifacts/model.json",
     "report_path": "artifacts/report.json"
@@ -396,9 +448,14 @@ fields. Neither runner changes Python's process-global random state.
   not optimized native kernels. Full MovieLens 1M runs can therefore be slow.
 - There is no feature store, distributed execution, online serving layer, or
   hyperparameter search.
-- Offline holdout metrics assume unobserved items are candidates and do not
-  correct for exposure/selection bias. Bootstrap intervals treat users as the
-  resampling unit and do not model temporal or social dependence.
+- Offline holdout metrics assume unobserved items are candidates. Exposure and
+  selection bias are corrected only when a run declares an exposure model, and
+  then only as well as that model describes the logging policy that produced the
+  data: inverse weighting moves an estimate, and a wrong model moves it
+  somewhere else rather than failing loudly. The reported effective sample size
+  says how few observations the corrected number rests on. Bootstrap intervals
+  treat users as the resampling unit and do not model temporal or social
+  dependence.
 - Recorded wall-clock timing depends on the host, Python build, background
   load, and filesystem cache. Compare timing only under a controlled protocol.
 - Saved JSON models can be large. Validate file provenance and apply ordinary

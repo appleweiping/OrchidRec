@@ -11,7 +11,7 @@ runtime dependencies outside the Python standard library**.
 
 It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
-deterministic ID mapping, three train/test split strategies, five
+deterministic ID mapping, three train/test split strategies, six
 recommenders, six ranking metrics, user bootstrap intervals, paired model
 comparisons, portable JSON model state, and JSON/CSV/standalone-HTML reports.
 
@@ -85,6 +85,7 @@ Create `movielens-benchmark.json`:
     {"label": "popularity", "name": "popularity", "params": {"weighted": false}},
     {"label": "item-knn", "name": "item_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
     {"label": "bpr-mf", "name": "implicit_mf", "params": {"factors": 16, "epochs": 5}},
+    {"label": "confidence-als", "name": "confidence_als", "params": {"factors": 16, "epochs": 3, "alpha": 40.0, "regularization": 0.1}},
     {"label": "user-knn", "name": "user_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
     {"label": "sequential-markov", "name": "sequential_markov", "params": {"weighted": true, "popularity_mix": 0.05}}
   ]
@@ -127,7 +128,7 @@ flowchart LR
     N -->|inner split| O[Training / validation]
     O -->|select only on validation| F[Selected parameters]
     N -->|disabled| F
-    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / Markov| P[Refit on development]
+    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / confidence ALS / Markov| P[Refit on development]
     P -->|one final test evaluation| G[Candidate scores]
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
@@ -182,7 +183,8 @@ optional fields:
 
 Unknown fields are rejected. Repeated user-item events are allowed: Popularity,
 ItemKNN, and UserKNN aggregate their values, while ImplicitMF treats the pair as
-one positive preference. SequentialMarkov consumes every timestamped event in
+one positive preference. ConfidenceALS sums repeated values into one declared
+confidence before solving. SequentialMarkov consumes every timestamped event in
 chronological order and may therefore retain repeated transitions. A user-item
 pair is never split across training and test, so repeated events cannot leak the
 evaluation target into model fitting.
@@ -237,6 +239,34 @@ the popularity fallback.
 Training cost is roughly
 `epochs × positives × negative_samples × factors`. All initialization,
 shuffling, and negative sampling use a model-local seeded generator.
+
+### ConfidenceALS
+
+Fits the confidence-weighted implicit-feedback objective of Hu, Koren, and
+Volinsky with exact alternating least-squares updates. For an aggregate event
+strength `r_ui`, the binary preference is `p_ui = 1` when the pair was observed
+and zero otherwise, while its confidence is `c_ui = 1 + alpha * r_ui` (and one
+for an unobserved pair). The optimized objective is:
+
+```text
+sum_ui c_ui * (p_ui - x_u dot y_i)^2
+  + regularization * (sum_u ||x_u||^2 + sum_i ||y_i||^2)
+```
+
+Each user update and each item update solves its regularized symmetric positive-
+definite normal equation with a checked Cholesky factorization. The solver
+rejects nonsymmetric, singular, ill-conditioned, overflowing, non-finite, or
+high-residual systems instead of returning questionable factors. The fitted
+model records the initial objective and every post-epoch objective; loading
+requires the trace to be finite, non-negative, correctly sized, and non-
+increasing. Unknown users receive the same weighted-popularity fallback as the
+other personalized models.
+
+Training is deterministic for a given seed and input values. Factors are
+limited to 64, epochs to 100, confidence to `1e12`, stored factor state to five
+million values, and the standard-library work estimate to one billion small-
+matrix operations. Configurations beyond those explicit resource boundaries
+fail before factor allocation or optimization.
 
 ### UserKNN
 
@@ -398,6 +428,12 @@ in the complete MovieLens example above.
       "grid": {"factors": [8, 16], "epochs": [5, 10]}
     },
     {
+      "label": "confidence-als",
+      "name": "confidence_als",
+      "params": {"regularization": 0.1},
+      "grid": {"factors": [8, 16], "epochs": [3, 5], "alpha": [10.0, 40.0]}
+    },
+    {
       "label": "user-knn",
       "name": "user_knn",
       "grid": {"neighbors": [20, 40], "shrinkage": [0.0, 10.0]}
@@ -421,15 +457,17 @@ accepts `maximize` or `minimize` and defaults to `maximize` when omitted.
 As with the outer split, `validation_ratio` is validated but ignored by
 `leave_one_out`.
 
-Popularity, ItemKNN, UserKNN, and SequentialMarkov are deterministic and therefore run once per candidate.
-ImplicitMF runs every candidate once for each distinct
+Popularity, ItemKNN, UserKNN, and SequentialMarkov are deterministic and
+therefore run once per candidate.
+ImplicitMF and ConfidenceALS run every candidate once for each distinct
 `implicit_mf_seeds` value and selection uses the arithmetic mean of that
 validation metric; one to sixteen unique integer seeds are accepted. Those
 seeds are validation repeats only. Model-level
-`implicit_mf.seed` is rejected when tuning is active; the final refit always
-uses the benchmark's top-level `seed`, making the single final test evaluation
-unambiguous. Tuning timings are observational, just like final benchmark
-timings.
+`implicit_mf.seed` and `confidence_als.seed` are rejected when tuning is active;
+the field retains its original name for configuration compatibility. The final
+refit always uses the benchmark's top-level `seed`, making the single final test
+evaluation unambiguous. Tuning timings are observational, just like final
+benchmark timings.
 
 The JSON report records the exact search space, every candidate and trial,
 effective parameters, all validation metrics, trial timing, selected score and
@@ -468,10 +506,11 @@ values fail early. Supported model parameters are:
 | `popularity` | `weighted` |
 | `item_knn` | `neighbors`, `shrinkage` |
 | `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed` |
+| `confidence_als` | `factors`, `epochs`, `alpha`, `regularization`, `seed` |
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
 
-When `implicit_mf.seed` is absent, the experiment-level seed is used.
+When either latent model's `seed` is absent, the experiment-level seed is used.
 
 ## CLI
 
@@ -556,8 +595,9 @@ fields. Neither runner changes Python's process-global random state.
   from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration, UserKNN builds pairwise user
   similarities, SequentialMarkov holds a sparse transition table, and
-  ImplicitMF uses simple SGD rather than optimized native kernels. Full
-  MovieLens 1M runs can therefore be slow.
+  ImplicitMF uses simple SGD while ConfidenceALS solves small systems in pure
+  Python rather than optimized native kernels. Full MovieLens 1M runs can
+  therefore be slow.
 - There is no feature store, distributed execution, or online serving layer.
 - Hyperparameter search is deliberately limited to explicit finite grids; it
   does not implement adaptive, Bayesian, distributed, or test-informed search.
@@ -596,7 +636,10 @@ tampering, MovieLens format failures, content hashes, deterministic bootstrap
 statistics, paired comparisons, portable report formats, CLI exit behavior,
 and end-to-end runs for every included model. UserKNN has hand-computed cosine
 checks; SequentialMarkov has hand-computed weighted/unweighted transition
-checks and explicit chronology-failure tests.
+checks and explicit chronology-failure tests. ConfidenceALS is checked against
+a hand-solved linear system, an independently assembled normal equation, and an
+independently recomputed dense objective, in addition to persistence,
+determinism, resource, and cold-start tests.
 See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes and
 [the release process](docs/releasing.md) for clean-install, SBOM, checksum,
 and build-provenance guarantees.
@@ -606,6 +649,8 @@ and build-provenance guarantees.
 OrchidRec's implementation and public interfaces are independent. The
 `ImplicitMF` pairwise objective follows Rendle et al., “BPR: Bayesian
 Personalized Ranking from Implicit Feedback” (UAI 2009, arXiv:1205.2618).
+`ConfidenceALS` follows Hu, Koren, and Volinsky, “Collaborative Filtering for
+Implicit Feedback Datasets” (ICDM 2008, doi:10.1109/ICDM.2008.22).
 `UserKNN` uses the classical cosine-neighborhood formulation, and
 `SequentialMarkov` uses an empirical first-order item transition model.
 The citation identifies the published algorithm; no external project code is

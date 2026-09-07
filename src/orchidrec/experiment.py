@@ -13,6 +13,7 @@ from orchidrec.errors import ConfigurationError, SerializationError, ValidationE
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
     BaseRecommender,
+    ConfidenceALS,
     ImplicitMF,
     ItemKNN,
     Popularity,
@@ -104,10 +105,11 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
     """Construct a configured model without fitting it."""
 
     params = dict(parameters)
-    if name == "implicit_mf":
+    if name in {"implicit_mf", "confidence_als"}:
         params.setdefault("seed", experiment_seed)
     registry: dict[str, type[BaseRecommender]] = {
         "popularity": Popularity,
+        "confidence_als": ConfidenceALS,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,

@@ -28,7 +28,14 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual(config.evaluation.bootstrap_samples, 1_000)
         self.assertEqual(
             [model.label for model in config.models],
-            ["popularity", "item-knn", "bpr-mf", "user-knn", "sequential-markov"],
+            [
+                "popularity",
+                "item-knn",
+                "bpr-mf",
+                "confidence-als",
+                "user-knn",
+                "sequential-markov",
+            ],
         )
         self.assertEqual(config.to_dict()["schema_version"], 1)
         self.assertNotIn("tuning", config.to_dict())
@@ -280,6 +287,7 @@ class BenchmarkConfigTests(unittest.TestCase):
         payload["tuning"] = {"selection_metric": "ndcg", "direction": "maximize"}
         model_parameters = (
             ("item_knn", "shrinkage"),
+            ("confidence_als", "alpha"),
             ("user_knn", "shrinkage"),
             ("sequential_markov", "popularity_mix"),
         )
@@ -297,6 +305,16 @@ class BenchmarkConfigTests(unittest.TestCase):
                     self.assertRaisesRegex(ConfigurationError, "semantically duplicate"),
                 ):
                     benchmark_config_from_dict(payload)
+
+        payload["models"] = [
+            {
+                "label": "model",
+                "name": "confidence_als",
+                "grid": {"regularization": [1, 1.0]},
+            }
+        ]
+        with self.assertRaisesRegex(ConfigurationError, "semantically duplicate"):
+            benchmark_config_from_dict(payload)
 
     def test_tuned_implicit_mf_seed_has_one_unambiguous_owner(self) -> None:
         for model in (

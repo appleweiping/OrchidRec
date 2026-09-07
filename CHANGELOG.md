@@ -6,6 +6,21 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.5.0] - 2026-09-07
+
+- Added an independent confidence-weighted implicit-feedback ALS model with
+  user/item alternating normal equations, deterministic local initialization,
+  repeated-event confidence aggregation, and weighted-popularity cold start.
+- Added a checked Cholesky solver with symmetry, conditioning, finiteness,
+  overflow, and residual safeguards, plus explicit factor, epoch, confidence,
+  state-size, interaction, entity, and work limits.
+- Persisted a validated objective trace and added independent dense-objective,
+  normal-equation-residual, and hand-solved-system oracles alongside order,
+  seed, tamper, overflow, resource, experiment, CLI, and benchmark tests.
+- Integrated ConfidenceALS into strict configuration, shared-split evaluation,
+  validation-only grid search with multi-seed repeats, reports, public imports,
+  portable model state, examples, and default six-model benchmarks.
+
 ## [0.4.0] - 2026-09-07
 
 - Added a genuine user-user cosine KNN recommender with deterministic nearest-

@@ -168,13 +168,15 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     model_name = model.get("name")
     if not isinstance(model_name, str) or model_name not in {
         "popularity",
+        "confidence_als",
         "item_knn",
         "implicit_mf",
         "user_knn",
         "sequential_markov",
     }:
         raise ConfigurationError(
-            "model.name must be popularity, item_knn, implicit_mf, user_knn, or sequential_markov"
+            "model.name must be popularity, item_knn, implicit_mf, confidence_als, user_knn, "
+            "or sequential_markov"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -188,14 +190,23 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "negative_samples",
             "seed",
         },
+        "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }
     _unknown(params, allowed_params[model_name], "model.params")
-    from orchidrec.models import ImplicitMF, ItemKNN, Popularity, SequentialMarkov, UserKNN
+    from orchidrec.models import (
+        ConfidenceALS,
+        ImplicitMF,
+        ItemKNN,
+        Popularity,
+        SequentialMarkov,
+        UserKNN,
+    )
 
     model_types = {
         "popularity": Popularity,
+        "confidence_als": ConfidenceALS,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,

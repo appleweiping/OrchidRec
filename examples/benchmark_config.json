@@ -45,6 +45,12 @@
       "grid": {"factors": [2, 4], "epochs": [2, 3]}
     },
     {
+      "label": "confidence-als",
+      "name": "confidence_als",
+      "params": {"regularization": 0.1},
+      "grid": {"factors": [2, 4], "epochs": [1, 2], "alpha": [10.0, 40.0]}
+    },
+    {
       "label": "user-knn",
       "name": "user_knn",
       "params": {},

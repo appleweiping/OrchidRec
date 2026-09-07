@@ -15,6 +15,7 @@ from orchidrec.models.base import BaseRecommender
 def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     """Construct the registered model declared by a state envelope."""
 
+    from orchidrec.models.confidence_als import ConfidenceALS
     from orchidrec.models.implicit_mf import ImplicitMF
     from orchidrec.models.item_knn import ItemKNN
     from orchidrec.models.popularity import Popularity
@@ -26,6 +27,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     model_type = state.get("model_type")
     registry: dict[str, type[BaseRecommender]] = {
         Popularity.model_type: Popularity,
+        ConfidenceALS.model_type: ConfidenceALS,
         ItemKNN.model_type: ItemKNN,
         ImplicitMF.model_type: ImplicitMF,
         UserKNN.model_type: UserKNN,

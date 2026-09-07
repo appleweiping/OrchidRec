@@ -13,7 +13,14 @@ from orchidrec._json import strict_json_loads
 from orchidrec._numeric import safe_float
 from orchidrec.datasets import DatasetFormat
 from orchidrec.errors import ConfigurationError, ValidationError
-from orchidrec.models import ImplicitMF, ItemKNN, Popularity, SequentialMarkov, UserKNN
+from orchidrec.models import (
+    ConfidenceALS,
+    ImplicitMF,
+    ItemKNN,
+    Popularity,
+    SequentialMarkov,
+    UserKNN,
+)
 
 BENCHMARK_CONFIG_SCHEMA_VERSION = 1
 BENCHMARK_METRIC_NAMES = ("precision", "recall", "ndcg", "mrr", "coverage", "novelty")
@@ -90,7 +97,7 @@ class BenchmarkModelSpec:
 
 
 def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
-    """Return lightweight, deterministic defaults across five built-in models."""
+    """Return lightweight defaults across six built-in models."""
 
     return (
         BenchmarkModelSpec("popularity", "popularity", {"weighted": False}),
@@ -99,6 +106,11 @@ def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
             "bpr-mf",
             "implicit_mf",
             {"factors": 16, "epochs": 5, "negative_samples": 1},
+        ),
+        BenchmarkModelSpec(
+            "confidence-als",
+            "confidence_als",
+            {"factors": 16, "epochs": 3, "alpha": 40.0, "regularization": 0.1},
         ),
         BenchmarkModelSpec("user-knn", "user_knn", {"neighbors": 40, "shrinkage": 10.0}),
         BenchmarkModelSpec(
@@ -182,13 +194,14 @@ def _validated_model_parameters(
 ) -> None:
     model_types = {
         "popularity": Popularity,
+        "confidence_als": ConfidenceALS,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
     }
     validated_params = dict(params)
-    if name == "implicit_mf":
+    if name in {"implicit_mf", "confidence_als"}:
         validated_params.setdefault("seed", seed)
     try:
         model_types[name](**validated_params)
@@ -219,12 +232,13 @@ def _parse_model(
         "popularity",
         "item_knn",
         "implicit_mf",
+        "confidence_als",
         "user_knn",
         "sequential_markov",
     }:
         raise ConfigurationError(
-            f"models[{index}].name must be popularity, item_knn, implicit_mf, user_knn, "
-            "or sequential_markov"
+            f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
+            "user_knn, or sequential_markov"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -238,6 +252,7 @@ def _parse_model(
             "negative_samples",
             "seed",
         },
+        "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }[name]
@@ -306,6 +321,8 @@ def _parse_model(
             ("item_knn", "shrinkage"),
             ("implicit_mf", "learning_rate"),
             ("implicit_mf", "regularization"),
+            ("confidence_als", "alpha"),
+            ("confidence_als", "regularization"),
             ("user_knn", "shrinkage"),
             ("sequential_markov", "popularity_mix"),
         }
@@ -319,10 +336,14 @@ def _parse_model(
                     f"models[{index}].grid.{parameter} must not contain "
                     "semantically duplicate values"
                 )
-    if tuning_enabled and name == "implicit_mf" and ("seed" in params or "seed" in grid):
+    if (
+        tuning_enabled
+        and name in {"implicit_mf", "confidence_als"}
+        and ("seed" in params or "seed" in grid)
+    ):
         raise ConfigurationError(
-            f"models[{index}] cannot tune or fix implicit_mf.seed; "
-            "use tuning.implicit_mf_seeds for validation repeats and top-level seed for final fit"
+            f"models[{index}] cannot tune or fix {name}.seed; use tuning.implicit_mf_seeds "
+            "for seeded latent-model validation repeats and top-level seed for final fit"
         )
     return BenchmarkModelSpec(label=label, name=name, params=dict(params), grid=grid)
 

@@ -184,7 +184,14 @@ class ExtendedModelIntegrationTests(unittest.TestCase):
         names = [spec.name for spec in default_benchmark_models()]
         self.assertEqual(
             names,
-            ["popularity", "item_knn", "implicit_mf", "user_knn", "sequential_markov"],
+            [
+                "popularity",
+                "item_knn",
+                "implicit_mf",
+                "confidence_als",
+                "user_knn",
+                "sequential_markov",
+            ],
         )
 
 

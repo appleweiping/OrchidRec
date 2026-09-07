@@ -17,7 +17,12 @@ class ExperimentTests(unittest.TestCase):
     def make_config(self, directory: str, model: str = "popularity"):
         data_path = Path(directory) / "events.json"
         demo_dataset().save_json(data_path)
-        params = {"factors": 3, "epochs": 3} if model == "implicit_mf" else {}
+        if model == "implicit_mf":
+            params = {"factors": 3, "epochs": 3}
+        elif model == "confidence_als":
+            params = {"factors": 3, "epochs": 2}
+        else:
+            params = {}
         return config_from_dict(
             {
                 "seed": 13,
@@ -32,7 +37,14 @@ class ExperimentTests(unittest.TestCase):
 
     def test_all_builtin_models_run_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            for name in ("popularity", "item_knn", "implicit_mf"):
+            for name in (
+                "popularity",
+                "item_knn",
+                "implicit_mf",
+                "confidence_als",
+                "user_knn",
+                "sequential_markov",
+            ):
                 with self.subTest(model=name):
                     result = run_experiment(self.make_config(directory, name))
                     self.assertEqual(result.model_type, name)

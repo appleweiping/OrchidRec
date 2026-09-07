@@ -33,6 +33,7 @@ from orchidrec.datasets import (
 from orchidrec.experiment import ExperimentResult, run_experiment
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
+    ConfidenceALS,
     ImplicitMF,
     ItemKNN,
     Popularity,
@@ -78,6 +79,7 @@ __all__ = [
     "BenchmarkTuningResult",
     "BenchmarkValidationSplitConfig",
     "BootstrapInterval",
+    "ConfidenceALS",
     "DatasetFormat",
     "DatasetSummary",
     "EntityId",
@@ -126,4 +128,4 @@ __all__ = [
     "uniform_exposure",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

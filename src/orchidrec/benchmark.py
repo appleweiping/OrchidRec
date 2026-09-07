@@ -201,6 +201,7 @@ class BenchmarkTuningResult:
             },
             "seed_policy": {
                 "implicit_mf_validation_seeds": list(self.implicit_mf_seeds),
+                "confidence_als_validation_seeds": list(self.implicit_mf_seeds),
                 "final_fit_seed": self.final_seed,
                 "deterministic_models_are_not_repeated": True,
             },
@@ -541,7 +542,9 @@ def _tune_model(
     candidate_parameters: list[dict[str, Any]] = []
     for candidate_index, candidate in enumerate(candidates):
         seeds: tuple[int | None, ...] = (
-            tuple(tuning.implicit_mf_seeds) if spec.name == "implicit_mf" else (None,)
+            tuple(tuning.implicit_mf_seeds)
+            if spec.name in {"implicit_mf", "confidence_als"}
+            else (None,)
         )
         scores: list[float] = []
         indices: list[int] = []
@@ -788,7 +791,9 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
                 selected_candidate_index=selected.selected_candidate_index,
                 selected_validation_score=selected.selected_validation_score,
                 final_parameters=evaluated[index].parameters,
-                final_seed=config.seed if selected.spec.name == "implicit_mf" else None,
+                final_seed=(
+                    config.seed if selected.spec.name in {"implicit_mf", "confidence_als"} else None
+                ),
             )
             for index, selected in enumerate(selected_models)
         )

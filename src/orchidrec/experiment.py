@@ -17,6 +17,8 @@ from orchidrec.models import (
     ItemKNN,
     Popularity,
     Recommendation,
+    SequentialMarkov,
+    UserKNN,
     save_model,
 )
 from orchidrec.propensity import popularity_exposure
@@ -108,6 +110,8 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
         "popularity": Popularity,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
+        "user_knn": UserKNN,
+        "sequential_markov": SequentialMarkov,
     }
     model_class = registry.get(name)
     if model_class is None:

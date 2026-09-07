@@ -18,6 +18,8 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     from orchidrec.models.implicit_mf import ImplicitMF
     from orchidrec.models.item_knn import ItemKNN
     from orchidrec.models.popularity import Popularity
+    from orchidrec.models.sequential_markov import SequentialMarkov
+    from orchidrec.models.user_knn import UserKNN
 
     if not isinstance(state, Mapping):
         raise SerializationError("model state must be a JSON object")
@@ -26,6 +28,8 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
         Popularity.model_type: Popularity,
         ItemKNN.model_type: ItemKNN,
         ImplicitMF.model_type: ImplicitMF,
+        UserKNN.model_type: UserKNN,
+        SequentialMarkov.model_type: SequentialMarkov,
     }
     model_class = registry.get(model_type) if isinstance(model_type, str) else None
     if model_class is None:

@@ -5,6 +5,8 @@ from orchidrec.models.implicit_mf import ImplicitMF
 from orchidrec.models.io import load_model, model_from_state, save_model
 from orchidrec.models.item_knn import ItemKNN
 from orchidrec.models.popularity import Popularity
+from orchidrec.models.sequential_markov import SequentialMarkov
+from orchidrec.models.user_knn import UserKNN
 
 __all__ = [
     "BaseRecommender",
@@ -12,6 +14,8 @@ __all__ = [
     "ItemKNN",
     "Popularity",
     "Recommendation",
+    "SequentialMarkov",
+    "UserKNN",
     "load_model",
     "model_from_state",
     "save_model",

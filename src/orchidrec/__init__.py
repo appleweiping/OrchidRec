@@ -32,7 +32,14 @@ from orchidrec.datasets import (
 )
 from orchidrec.experiment import ExperimentResult, run_experiment
 from orchidrec.metrics import MetricReport, evaluate_ranking
-from orchidrec.models import ImplicitMF, ItemKNN, Popularity, Recommendation
+from orchidrec.models import (
+    ImplicitMF,
+    ItemKNN,
+    Popularity,
+    Recommendation,
+    SequentialMarkov,
+    UserKNN,
+)
 from orchidrec.propensity import (
     DEFAULT_EXPONENT,
     DEFAULT_MINIMUM_PROPENSITY,
@@ -87,11 +94,13 @@ __all__ = [
     "PairedBootstrapResult",
     "Popularity",
     "Recommendation",
+    "SequentialMarkov",
     "SplitResult",
     "StableIdMap",
     "TuningCandidateResult",
     "TuningTrial",
     "UnbiasedMetricReport",
+    "UserKNN",
     "benchmark_config_from_dict",
     "bootstrap_mean",
     "evaluate_ranking",
@@ -117,4 +126,4 @@ __all__ = [
     "uniform_exposure",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

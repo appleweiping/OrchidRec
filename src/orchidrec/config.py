@@ -170,8 +170,12 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "popularity",
         "item_knn",
         "implicit_mf",
+        "user_knn",
+        "sequential_markov",
     }:
-        raise ConfigurationError("model.name must be popularity, item_knn, or implicit_mf")
+        raise ConfigurationError(
+            "model.name must be popularity, item_knn, implicit_mf, user_knn, or sequential_markov"
+        )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
         "popularity": {"weighted"},
@@ -184,14 +188,18 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "negative_samples",
             "seed",
         },
+        "user_knn": {"neighbors", "shrinkage"},
+        "sequential_markov": {"weighted", "popularity_mix"},
     }
     _unknown(params, allowed_params[model_name], "model.params")
-    from orchidrec.models import ImplicitMF, ItemKNN, Popularity
+    from orchidrec.models import ImplicitMF, ItemKNN, Popularity, SequentialMarkov, UserKNN
 
     model_types = {
         "popularity": Popularity,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
+        "user_knn": UserKNN,
+        "sequential_markov": SequentialMarkov,
     }
     try:
         model_types[model_name](**dict(params))

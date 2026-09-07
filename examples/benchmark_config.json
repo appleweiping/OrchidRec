@@ -43,6 +43,18 @@
       "name": "implicit_mf",
       "params": {"negative_samples": 1},
       "grid": {"factors": [2, 4], "epochs": [2, 3]}
+    },
+    {
+      "label": "user-knn",
+      "name": "user_knn",
+      "params": {},
+      "grid": {"neighbors": [2, 4], "shrinkage": [0.0, 1.0]}
+    },
+    {
+      "label": "sequential-markov",
+      "name": "sequential_markov",
+      "params": {},
+      "grid": {"weighted": [false, true], "popularity_mix": [0.0, 0.05]}
     }
   ]
 }

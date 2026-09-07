@@ -27,7 +27,8 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual(config.split.method, "leave_one_out")
         self.assertEqual(config.evaluation.bootstrap_samples, 1_000)
         self.assertEqual(
-            [model.label for model in config.models], ["popularity", "item-knn", "bpr-mf"]
+            [model.label for model in config.models],
+            ["popularity", "item-knn", "bpr-mf", "user-knn", "sequential-markov"],
         )
         self.assertEqual(config.to_dict()["schema_version"], 1)
         self.assertNotIn("tuning", config.to_dict())
@@ -277,19 +278,25 @@ class BenchmarkConfigTests(unittest.TestCase):
     def test_grid_rejects_numerically_equivalent_float_values(self) -> None:
         payload = self.minimal()
         payload["tuning"] = {"selection_metric": "ndcg", "direction": "maximize"}
-        for values in ([0, 0.0], [-0.0, 0.0]):
-            payload["models"] = [
-                {
-                    "label": "knn",
-                    "name": "item_knn",
-                    "grid": {"shrinkage": values},
-                }
-            ]
-            with (
-                self.subTest(values=values),
-                self.assertRaisesRegex(ConfigurationError, "semantically duplicate"),
-            ):
-                benchmark_config_from_dict(payload)
+        model_parameters = (
+            ("item_knn", "shrinkage"),
+            ("user_knn", "shrinkage"),
+            ("sequential_markov", "popularity_mix"),
+        )
+        for model_name, parameter in model_parameters:
+            for values in ([0, 0.0], [-0.0, 0.0]):
+                payload["models"] = [
+                    {
+                        "label": "model",
+                        "name": model_name,
+                        "grid": {parameter: values},
+                    }
+                ]
+                with (
+                    self.subTest(model=model_name, parameter=parameter, values=values),
+                    self.assertRaisesRegex(ConfigurationError, "semantically duplicate"),
+                ):
+                    benchmark_config_from_dict(payload)
 
     def test_tuned_implicit_mf_seed_has_one_unambiguous_owner(self) -> None:
         for model in (

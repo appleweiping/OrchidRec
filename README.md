@@ -11,7 +11,7 @@ runtime dependencies outside the Python standard library**.
 
 It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
-deterministic ID mapping, three train/test split strategies, three
+deterministic ID mapping, three train/test split strategies, five
 recommenders, six ranking metrics, user bootstrap intervals, paired model
 comparisons, portable JSON model state, and JSON/CSV/standalone-HTML reports.
 
@@ -84,7 +84,9 @@ Create `movielens-benchmark.json`:
   "models": [
     {"label": "popularity", "name": "popularity", "params": {"weighted": false}},
     {"label": "item-knn", "name": "item_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
-    {"label": "bpr-mf", "name": "implicit_mf", "params": {"factors": 16, "epochs": 5}}
+    {"label": "bpr-mf", "name": "implicit_mf", "params": {"factors": 16, "epochs": 5}},
+    {"label": "user-knn", "name": "user_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
+    {"label": "sequential-markov", "name": "sequential_markov", "params": {"weighted": true, "popularity_mix": 0.05}}
   ]
 }
 ```
@@ -125,7 +127,7 @@ flowchart LR
     N -->|inner split| O[Training / validation]
     O -->|select only on validation| F[Selected parameters]
     N -->|disabled| F
-    F -->|Popularity / ItemKNN / ImplicitMF| P[Refit on development]
+    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / Markov| P[Refit on development]
     P -->|one final test evaluation| G[Candidate scores]
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
@@ -178,10 +180,12 @@ optional fields:
 | `value` | finite number greater than zero | Positive implicit-feedback strength; default `1.0`. |
 | `timestamp` | finite number or `null` | Ordering value used by temporal splits. |
 
-Unknown fields are rejected. Repeated user-item events are allowed: Popularity
-and ItemKNN aggregate their values, while ImplicitMF treats the pair as one
-positive preference. A user-item pair is never split across training and test,
-so repeated events cannot leak the evaluation target into model fitting.
+Unknown fields are rejected. Repeated user-item events are allowed: Popularity,
+ItemKNN, and UserKNN aggregate their values, while ImplicitMF treats the pair as
+one positive preference. SequentialMarkov consumes every timestamped event in
+chronological order and may therefore retain repeated transitions. A user-item
+pair is never split across training and test, so repeated events cannot leak the
+evaluation target into model fitting.
 
 `StableIdMap` sorts integer IDs numerically before string IDs, which are sorted
 lexicographically. The mapping is therefore independent of input row order and
@@ -233,6 +237,23 @@ the popularity fallback.
 Training cost is roughly
 `epochs × positives × negative_samples × factors`. All initialization,
 shuffling, and negative sampling use a model-local seeded generator.
+
+### UserKNN
+
+Builds weighted item vectors for every user, computes cosine similarities with
+non-negative shrinkage, and retains the strongest configured user neighbors.
+Candidate scores are similarity-weighted means over neighbors that interacted
+with the candidate. This is a distinct user-based collaborative-filtering path,
+not an alias for ItemKNN; its neighborhood is over people instead of items.
+
+### SequentialMarkov
+
+Learns a first-order transition matrix from each user's timestamped event
+sequence. It ranks candidates from the user's latest fitted item using empirical
+transition probabilities, optionally weighted by interaction strength and mixed
+with a declared popularity prior. Missing timestamps are rejected because an
+unordered table cannot support an honest sequential model. Input order is the
+documented deterministic tie-break for equal timestamps.
 
 ## Top-K behavior
 
@@ -375,6 +396,16 @@ in the complete MovieLens example above.
       "name": "implicit_mf",
       "params": {"negative_samples": 1},
       "grid": {"factors": [8, 16], "epochs": [5, 10]}
+    },
+    {
+      "label": "user-knn",
+      "name": "user_knn",
+      "grid": {"neighbors": [20, 40], "shrinkage": [0.0, 10.0]}
+    },
+    {
+      "label": "sequential-markov",
+      "name": "sequential_markov",
+      "grid": {"weighted": [false, true], "popularity_mix": [0.0, 0.05]}
     }
   ]
 }
@@ -390,7 +421,7 @@ accepts `maximize` or `minimize` and defaults to `maximize` when omitted.
 As with the outer split, `validation_ratio` is validated but ignored by
 `leave_one_out`.
 
-Popularity and ItemKNN are deterministic and therefore run once per candidate.
+Popularity, ItemKNN, UserKNN, and SequentialMarkov are deterministic and therefore run once per candidate.
 ImplicitMF runs every candidate once for each distinct
 `implicit_mf_seeds` value and selection uses the arithmetic mean of that
 validation metric; one to sixteen unique integer seeds are accepted. Those
@@ -437,6 +468,8 @@ values fail early. Supported model parameters are:
 | `popularity` | `weighted` |
 | `item_knn` | `neighbors`, `shrinkage` |
 | `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed` |
+| `user_knn` | `neighbors`, `shrinkage` |
+| `sequential_markov` | `weighted`, `popularity_mix` |
 
 When `implicit_mf.seed` is absent, the experiment-level seed is used.
 
@@ -521,8 +554,10 @@ fields. Neither runner changes Python's process-global random state.
 - Feedback is positive/implicit; zero and negative values are rejected.
 - MovieLens rating thresholding discards lower ratings rather than learning
   from them, and this toolkit does not predict explicit star ratings.
-- ItemKNN uses dense per-user pair enumeration and ImplicitMF uses simple SGD,
-  not optimized native kernels. Full MovieLens 1M runs can therefore be slow.
+- ItemKNN uses dense per-user pair enumeration, UserKNN builds pairwise user
+  similarities, SequentialMarkov holds a sparse transition table, and
+  ImplicitMF uses simple SGD rather than optimized native kernels. Full
+  MovieLens 1M runs can therefore be slow.
 - There is no feature store, distributed execution, or online serving layer.
 - Hyperparameter search is deliberately limited to explicit finite grids; it
   does not implement adaptive, Bayesian, distributed, or test-informed search.
@@ -559,7 +594,9 @@ The test suite covers validation failures, deterministic splitting and
 training, ranking semantics, all metrics, strict configuration, serialization
 tampering, MovieLens format failures, content hashes, deterministic bootstrap
 statistics, paired comparisons, portable report formats, CLI exit behavior,
-and end-to-end runs for every included model.
+and end-to-end runs for every included model. UserKNN has hand-computed cosine
+checks; SequentialMarkov has hand-computed weighted/unweighted transition
+checks and explicit chronology-failure tests.
 See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes and
 [the release process](docs/releasing.md) for clean-install, SBOM, checksum,
 and build-provenance guarantees.
@@ -569,6 +606,8 @@ and build-provenance guarantees.
 OrchidRec's implementation and public interfaces are independent. The
 `ImplicitMF` pairwise objective follows Rendle et al., “BPR: Bayesian
 Personalized Ranking from Implicit Feedback” (UAI 2009, arXiv:1205.2618).
+`UserKNN` uses the classical cosine-neighborhood formulation, and
+`SequentialMarkov` uses an empirical first-order item transition model.
 The citation identifies the published algorithm; no external project code is
 included.
 

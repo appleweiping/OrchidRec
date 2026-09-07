@@ -6,6 +6,18 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.4.0] - 2026-09-07
+
+- Added a genuine user-user cosine KNN recommender with deterministic nearest-
+  neighbor selection, shrinkage, popularity cold-start fallback, strict model
+  state validation, and hand-computed similarity/ranking tests.
+- Added a genuine first-order sequential Markov recommender over timestamped
+  user histories. Weighted and unweighted transition probabilities, chronology
+  requirements, equal-time ordering, cold start, tamper-resistant persistence,
+  configuration, experiment, and benchmark integration are independently tested.
+- Expanded the default shared-split benchmark from three to five models while
+  retaining the same sealed-test, bootstrap, reporting, and release gates.
+
 ## [0.3.0] - 2026-09-07
 
 - Added a tag-gated release pipeline with locked builds, clean wheel and sdist

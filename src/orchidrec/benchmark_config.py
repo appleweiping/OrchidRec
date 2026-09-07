@@ -13,7 +13,7 @@ from orchidrec._json import strict_json_loads
 from orchidrec._numeric import safe_float
 from orchidrec.datasets import DatasetFormat
 from orchidrec.errors import ConfigurationError, ValidationError
-from orchidrec.models import ImplicitMF, ItemKNN, Popularity
+from orchidrec.models import ImplicitMF, ItemKNN, Popularity, SequentialMarkov, UserKNN
 
 BENCHMARK_CONFIG_SCHEMA_VERSION = 1
 BENCHMARK_METRIC_NAMES = ("precision", "recall", "ndcg", "mrr", "coverage", "novelty")
@@ -90,7 +90,7 @@ class BenchmarkModelSpec:
 
 
 def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
-    """Return lightweight, deterministic defaults for the three built-ins."""
+    """Return lightweight, deterministic defaults across five built-in models."""
 
     return (
         BenchmarkModelSpec("popularity", "popularity", {"weighted": False}),
@@ -99,6 +99,12 @@ def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
             "bpr-mf",
             "implicit_mf",
             {"factors": 16, "epochs": 5, "negative_samples": 1},
+        ),
+        BenchmarkModelSpec("user-knn", "user_knn", {"neighbors": 40, "shrinkage": 10.0}),
+        BenchmarkModelSpec(
+            "sequential-markov",
+            "sequential_markov",
+            {"weighted": True, "popularity_mix": 0.05},
         ),
     )
 
@@ -178,6 +184,8 @@ def _validated_model_parameters(
         "popularity": Popularity,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
+        "user_knn": UserKNN,
+        "sequential_markov": SequentialMarkov,
     }
     validated_params = dict(params)
     if name == "implicit_mf":
@@ -207,9 +215,16 @@ def _parse_model(
         or len(label) > 100
     ):
         raise ConfigurationError(f"models[{index}].label must be a trimmed printable string")
-    if not isinstance(name, str) or name not in {"popularity", "item_knn", "implicit_mf"}:
+    if not isinstance(name, str) or name not in {
+        "popularity",
+        "item_knn",
+        "implicit_mf",
+        "user_knn",
+        "sequential_markov",
+    }:
         raise ConfigurationError(
-            f"models[{index}].name must be popularity, item_knn, or implicit_mf"
+            f"models[{index}].name must be popularity, item_knn, implicit_mf, user_knn, "
+            "or sequential_markov"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -223,6 +238,8 @@ def _parse_model(
             "negative_samples",
             "seed",
         },
+        "user_knn": {"neighbors", "shrinkage"},
+        "sequential_markov": {"weighted", "popularity_mix"},
     }[name]
     _unknown(params, allowed, f"models[{index}].params")
     _validated_model_parameters(name, params, seed=seed, location=f"models[{index}].params")
@@ -289,6 +306,8 @@ def _parse_model(
             ("item_knn", "shrinkage"),
             ("implicit_mf", "learning_rate"),
             ("implicit_mf", "regularization"),
+            ("user_knn", "shrinkage"),
+            ("sequential_markov", "popularity_mix"),
         }
         for parameter, values in grid.items():
             semantic_values = [

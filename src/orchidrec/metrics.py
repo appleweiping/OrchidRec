@@ -160,7 +160,9 @@ def ndcg_at_k(
     for user_id in users:
         relevant_items = set(relevant[user_id])
         ranked = _top_items(recommendations, user_id, k)
-        dcg = sum(1.0 / log2(rank + 2) for rank, item_id in enumerate(ranked) if item_id in relevant_items)
+        dcg = sum(
+            1.0 / log2(rank + 2) for rank, item_id in enumerate(ranked) if item_id in relevant_items
+        )
         ideal_length = min(k, len(relevant_items))
         ideal = sum(1.0 / log2(rank + 2) for rank in range(ideal_length))
         total += dcg / ideal

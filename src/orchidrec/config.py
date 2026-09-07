@@ -150,7 +150,11 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     split = _object(root.get("split", {}), "split")
     _unknown(split, {"method", "test_ratio"}, "split")
     split_method = split.get("method", "leave_one_out")
-    if not isinstance(split_method, str) or split_method not in {"random", "temporal", "leave_one_out"}:
+    if not isinstance(split_method, str) or split_method not in {
+        "random",
+        "temporal",
+        "leave_one_out",
+    }:
         raise ConfigurationError("split.method must be random, temporal, or leave_one_out")
     test_ratio = split.get("test_ratio", 0.2)
     if isinstance(test_ratio, bool) or not isinstance(test_ratio, (int, float)):
@@ -162,7 +166,11 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     model = _object(root["model"], "model")
     _unknown(model, {"name", "params"}, "model")
     model_name = model.get("name")
-    if not isinstance(model_name, str) or model_name not in {"popularity", "item_knn", "implicit_mf"}:
+    if not isinstance(model_name, str) or model_name not in {
+        "popularity",
+        "item_knn",
+        "implicit_mf",
+    }:
         raise ConfigurationError("model.name must be popularity, item_knn, or implicit_mf")
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -235,7 +243,9 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         split=SplitConfig(method=split_method, test_ratio=numeric_ratio),
         model=ModelConfig(name=model_name, params=dict(params)),
         evaluation=EvaluationConfig(k=k, exclude_seen=exclude_seen, exposure=exposure),
-        output=OutputConfig(report_path=optional_path("report_path"), model_path=optional_path("model_path")),
+        output=OutputConfig(
+            report_path=optional_path("report_path"), model_path=optional_path("model_path")
+        ),
     )
 
 

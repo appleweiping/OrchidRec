@@ -41,9 +41,10 @@ def save_model(model: BaseRecommender, path: str | Path) -> None:
     destination = Path(path)
     try:
         payload = model.to_state()
-        text = json.dumps(
-            payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-        ) + "\n"
+        text = (
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
+            + "\n"
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(text, encoding="utf-8")
     except SerializationError:

@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from orchidrec.benchmark_config import (
+    BENCHMARK_METRIC_NAMES,
     BenchmarkConfig,
     BenchmarkModelSpec,
+    BenchmarkTuningConfig,
     benchmark_config_from_dict,
 )
 from orchidrec.data import EntityId, InteractionDataset, stable_id_key
@@ -32,7 +34,7 @@ from orchidrec.statistics import (
 
 BENCHMARK_FORMAT = "orchidrec.benchmark"
 BENCHMARK_SCHEMA_VERSION = 1
-METRIC_NAMES = ("precision", "recall", "ndcg", "mrr", "coverage", "novelty")
+METRIC_NAMES = BENCHMARK_METRIC_NAMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +93,129 @@ class BenchmarkComparison:
 
 
 @dataclass(frozen=True, slots=True)
+class TuningTrial:
+    """One fit-and-evaluate run on the inner validation partition."""
+
+    candidate_index: int
+    seed: int | None
+    parameters: dict[str, Any]
+    selection_value: float
+    timing: BenchmarkTiming
+    metrics: MetricReport
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "candidate_index": self.candidate_index,
+            "seed": self.seed,
+            "parameters": dict(self.parameters),
+            "selection_value": self.selection_value,
+            "timing": self.timing.to_dict(),
+            "metrics": self.metrics.to_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TuningCandidateResult:
+    """Validation aggregate for one explicit Cartesian-product candidate."""
+
+    candidate_index: int
+    parameters: dict[str, Any]
+    mean_selection_value: float
+    trial_indices: tuple[int, ...]
+    selected: bool
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "candidate_index": self.candidate_index,
+            "parameters": dict(self.parameters),
+            "mean_selection_value": self.mean_selection_value,
+            "trial_indices": list(self.trial_indices),
+            "selected": self.selected,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ModelTuningResult:
+    """Full validation-only search record for one benchmark model."""
+
+    label: str
+    model_type: str
+    search_space: Mapping[str, tuple[Any, ...]]
+    candidates: tuple[TuningCandidateResult, ...]
+    trials: tuple[TuningTrial, ...]
+    selected_candidate_index: int
+    selected_validation_score: float
+    final_parameters: dict[str, Any]
+    final_seed: int | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "label": self.label,
+            "model_type": self.model_type,
+            "search_space": {name: list(values) for name, values in self.search_space.items()},
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+            "trials": [trial.to_dict() for trial in self.trials],
+            "selected_candidate_index": self.selected_candidate_index,
+            "selected_validation_score": self.selected_validation_score,
+            "final_parameters": dict(self.final_parameters),
+            "final_seed": self.final_seed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkTuningResult:
+    """Leakage-auditable inner-split model-selection evidence."""
+
+    selection_metric: str
+    direction: str
+    validation_method: str
+    validation_ratio: float
+    implicit_mf_seeds: tuple[int, ...]
+    final_seed: int
+    development_interactions: int
+    training_interactions: int
+    validation_interactions: int
+    evaluated_validation_interactions: int
+    cold_start_validation_interactions: int
+    evaluated_validation_users: int
+    development_fingerprint: str
+    training_fingerprint: str
+    validation_fingerprint: str
+    test_fingerprint: str
+    three_way_split_fingerprint: str
+    models: tuple[ModelTuningResult, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "selection_metric": self.selection_metric,
+            "direction": self.direction,
+            "validation_split": {
+                "method": self.validation_method,
+                "validation_ratio": self.validation_ratio,
+                "development_interactions": self.development_interactions,
+                "training_interactions": self.training_interactions,
+                "validation_interactions": self.validation_interactions,
+                "evaluated_validation_interactions": self.evaluated_validation_interactions,
+                "cold_start_validation_interactions": self.cold_start_validation_interactions,
+                "evaluated_validation_users": self.evaluated_validation_users,
+            },
+            "seed_policy": {
+                "implicit_mf_validation_seeds": list(self.implicit_mf_seeds),
+                "final_fit_seed": self.final_seed,
+                "deterministic_models_are_not_repeated": True,
+            },
+            "fingerprints": {
+                "development_sha256": self.development_fingerprint,
+                "training_sha256": self.training_fingerprint,
+                "validation_sha256": self.validation_fingerprint,
+                "test_sha256": self.test_fingerprint,
+                "three_way_split_sha256": self.three_way_split_fingerprint,
+            },
+            "models": [model.to_dict() for model in self.models],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class BenchmarkResult:
     """Complete versioned result for a reproducible multi-model benchmark."""
 
@@ -111,9 +236,10 @@ class BenchmarkResult:
     confidence: float
     models: tuple[BenchmarkModelResult, ...]
     comparisons: tuple[BenchmarkComparison, ...]
+    tuning: BenchmarkTuningResult | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "format": BENCHMARK_FORMAT,
             "schema_version": BENCHMARK_SCHEMA_VERSION,
             "seed": self.seed,
@@ -140,6 +266,9 @@ class BenchmarkResult:
             "models": [model.to_dict() for model in self.models],
             "comparisons": [comparison.to_dict() for comparison in self.comparisons],
         }
+        if self.tuning is not None:
+            payload["tuning"] = self.tuning.to_dict()
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,7 +392,9 @@ def _ranking_rows(
     return tuple(rows)
 
 
-def _aggregate(rows: Sequence[_RankingRow], indices: Sequence[int], catalog_size: int) -> _MetricVector:
+def _aggregate(
+    rows: Sequence[_RankingRow], indices: Sequence[int], catalog_size: int
+) -> _MetricVector:
     count = len(indices)
     exposure = 0
     novelty_count = 0
@@ -296,8 +427,15 @@ def _evaluate_model(
     spec: BenchmarkModelSpec,
     split: SplitResult,
     targets: _TargetSet,
+    *,
+    parameters: Mapping[str, Any] | None = None,
+    experiment_seed: int | None = None,
 ) -> _EvaluatedModel:
-    model = build_model(spec.name, spec.params, experiment_seed=config.seed)
+    model = build_model(
+        spec.name,
+        dict(spec.params if parameters is None else parameters),
+        experiment_seed=config.seed if experiment_seed is None else experiment_seed,
+    )
     fit_started = time.perf_counter_ns()
     model.fit(split.train)
     fit_seconds = (time.perf_counter_ns() - fit_started) / 1_000_000_000.0
@@ -342,6 +480,136 @@ def _evaluate_model(
     )
 
 
+def _validation_split(
+    tuning: BenchmarkTuningConfig,
+    dataset: InteractionDataset,
+    seed: int,
+) -> SplitResult:
+    validation = tuning.validation_split
+    if validation.method == "random":
+        return random_split(dataset, validation.validation_ratio, seed)
+    if validation.method == "temporal":
+        return temporal_split(dataset, validation.validation_ratio)
+    if validation.method == "leave_one_out":
+        return leave_one_out(dataset)
+    raise ConfigurationError(f"unknown validation split method: {validation.method!r}")
+
+
+def _parameter_candidates(spec: BenchmarkModelSpec) -> tuple[dict[str, Any], ...]:
+    """Expand a validated grid in a canonical, configuration-order-independent order."""
+
+    candidates: list[dict[str, Any]] = [dict(spec.params)]
+    for parameter in sorted(spec.grid):
+        candidates = [
+            {**candidate, parameter: value}
+            for candidate in candidates
+            for value in spec.grid[parameter]
+        ]
+    return tuple(candidates)
+
+
+def _selection_value(metrics: MetricReport, metric: str) -> float:
+    try:
+        return _point_metrics(metrics)[metric]
+    except KeyError as exc:
+        raise ConfigurationError(f"unknown tuning selection metric: {metric!r}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedModel:
+    spec: BenchmarkModelSpec
+    parameters: dict[str, Any]
+    candidates: tuple[TuningCandidateResult, ...]
+    trials: tuple[TuningTrial, ...]
+    selected_candidate_index: int
+    selected_validation_score: float
+
+
+def _tune_model(
+    config: BenchmarkConfig,
+    spec: BenchmarkModelSpec,
+    validation_split: SplitResult,
+    targets: _TargetSet,
+) -> _SelectedModel:
+    tuning = config.tuning
+    if tuning is None:
+        raise ConfigurationError("internal tuning configuration is missing")
+    candidates = _parameter_candidates(spec)
+    aggregate_scores: list[float] = []
+    trial_rows: list[TuningTrial] = []
+    trial_indices_by_candidate: list[tuple[int, ...]] = []
+    candidate_parameters: list[dict[str, Any]] = []
+    for candidate_index, candidate in enumerate(candidates):
+        seeds: tuple[int | None, ...] = (
+            tuple(tuning.implicit_mf_seeds) if spec.name == "implicit_mf" else (None,)
+        )
+        scores: list[float] = []
+        indices: list[int] = []
+        canonical_parameters: dict[str, Any] | None = None
+        for trial_seed in seeds:
+            trial_parameters = dict(candidate)
+            if trial_seed is not None:
+                trial_parameters["seed"] = trial_seed
+            evaluated = _evaluate_model(
+                config,
+                spec,
+                validation_split,
+                targets,
+                parameters=trial_parameters,
+                experiment_seed=config.seed if trial_seed is None else trial_seed,
+            )
+            value = _selection_value(evaluated.metrics, tuning.selection_metric)
+            if canonical_parameters is None:
+                canonical_parameters = dict(evaluated.parameters)
+                canonical_parameters.pop("seed", None)
+            trial_index = len(trial_rows)
+            indices.append(trial_index)
+            scores.append(value)
+            trial_rows.append(
+                TuningTrial(
+                    candidate_index=candidate_index,
+                    seed=trial_seed,
+                    parameters=evaluated.parameters,
+                    selection_value=value,
+                    timing=evaluated.timing,
+                    metrics=evaluated.metrics,
+                )
+            )
+        if canonical_parameters is None:
+            raise ConfigurationError("a tuning candidate produced no validation trials")
+        candidate_parameters.append(canonical_parameters)
+        aggregate_scores.append(math.fsum(scores) / len(scores))
+        trial_indices_by_candidate.append(tuple(indices))
+    if tuning.direction == "maximize":
+        selected_index = max(
+            range(len(candidates)),
+            key=lambda index: (aggregate_scores[index], -index),
+        )
+    else:
+        selected_index = min(
+            range(len(candidates)),
+            key=lambda index: (aggregate_scores[index], index),
+        )
+    candidate_rows = tuple(
+        TuningCandidateResult(
+            candidate_index=index,
+            parameters=candidate_parameters[index],
+            mean_selection_value=aggregate_scores[index],
+            trial_indices=trial_indices_by_candidate[index],
+            selected=index == selected_index,
+        )
+        for index in range(len(candidates))
+    )
+    return _SelectedModel(
+        spec=spec,
+        parameters=dict(candidates[selected_index]),
+        candidates=candidate_rows,
+        trials=tuple(trial_rows),
+        selected_candidate_index=selected_index,
+        selected_validation_score=aggregate_scores[selected_index],
+    )
+
+
 def _semantic_config_fingerprint(config: BenchmarkConfig, data_sha256: str) -> str:
     payload = config.to_dict()
     data = payload["data"]
@@ -365,6 +633,20 @@ def _split_fingerprint(split: SplitResult) -> str:
     payload = {
         "train": interaction_fingerprint(split.train),
         "test": interaction_fingerprint(split.test),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _three_way_split_fingerprint(
+    training: InteractionDataset,
+    validation: InteractionDataset,
+    test: InteractionDataset,
+) -> str:
+    payload = {
+        "training": interaction_fingerprint(training),
+        "validation": interaction_fingerprint(validation),
+        "test": interaction_fingerprint(test),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("ascii")
     return hashlib.sha256(encoded).hexdigest()
@@ -443,7 +725,7 @@ def _bootstrap(
 
 
 def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
-    """Run every configured model on one shared split and bootstrap plan."""
+    """Run every configured model with an optional validation-only grid search."""
 
     if not isinstance(config, BenchmarkConfig):
         raise ConfigurationError("config must be a BenchmarkConfig")
@@ -461,14 +743,83 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
     split = _split(config, loaded.dataset)
     if not split.train or not split.test:
         raise ConfigurationError("split must produce non-empty train and test partitions")
+    tuning_result: BenchmarkTuningResult | None = None
+    selected_models: tuple[_SelectedModel, ...] | None = None
+    validation_split: SplitResult | None = None
+    validation_targets: _TargetSet | None = None
+    if config.tuning is not None:
+        # The search receives only the outer training partition. The outer test
+        # partition is not converted to targets or passed to an evaluator until
+        # every model has selected its hyperparameters.
+        validation_split = _validation_split(config.tuning, split.train, config.seed)
+        if not validation_split.train or not validation_split.test:
+            raise ConfigurationError(
+                "validation split must produce non-empty training and validation partitions"
+            )
+        validation_targets = _targets(validation_split)
+        selected_models = tuple(
+            _tune_model(config, spec, validation_split, validation_targets)
+            for spec in config.models
+        )
     targets = _targets(split)
-    evaluated = tuple(_evaluate_model(config, spec, split, targets) for spec in config.models)
+    if selected_models is None:
+        evaluated = tuple(_evaluate_model(config, spec, split, targets) for spec in config.models)
+    else:
+        evaluated = tuple(
+            _evaluate_model(
+                config,
+                selected.spec,
+                split,
+                targets,
+                parameters=selected.parameters,
+                experiment_seed=config.seed,
+            )
+            for selected in selected_models
+        )
+        if config.tuning is None or validation_split is None or validation_targets is None:
+            raise ConfigurationError("internal tuning state is incomplete")
+        tuning_models = tuple(
+            ModelTuningResult(
+                label=selected.spec.label,
+                model_type=selected.spec.name,
+                search_space={name: tuple(values) for name, values in selected.spec.grid.items()},
+                candidates=selected.candidates,
+                trials=selected.trials,
+                selected_candidate_index=selected.selected_candidate_index,
+                selected_validation_score=selected.selected_validation_score,
+                final_parameters=evaluated[index].parameters,
+                final_seed=config.seed if selected.spec.name == "implicit_mf" else None,
+            )
+            for index, selected in enumerate(selected_models)
+        )
+        tuning_result = BenchmarkTuningResult(
+            selection_metric=config.tuning.selection_metric,
+            direction=config.tuning.direction,
+            validation_method=config.tuning.validation_split.method,
+            validation_ratio=config.tuning.validation_split.validation_ratio,
+            implicit_mf_seeds=config.tuning.implicit_mf_seeds,
+            final_seed=config.seed,
+            development_interactions=len(split.train),
+            training_interactions=len(validation_split.train),
+            validation_interactions=len(validation_split.test),
+            evaluated_validation_interactions=validation_targets.evaluated_interactions,
+            cold_start_validation_interactions=validation_targets.cold_start_interactions,
+            evaluated_validation_users=len(validation_targets.users),
+            development_fingerprint=interaction_fingerprint(split.train),
+            training_fingerprint=interaction_fingerprint(validation_split.train),
+            validation_fingerprint=interaction_fingerprint(validation_split.test),
+            test_fingerprint=interaction_fingerprint(split.test),
+            three_way_split_fingerprint=_three_way_split_fingerprint(
+                validation_split.train,
+                validation_split.test,
+                split.test,
+            ),
+            models=tuning_models,
+        )
     model_results, comparisons = _bootstrap(config, evaluated, len(split.train.item_ids))
     return BenchmarkResult(
         seed=config.seed,
-        config_fingerprint=_semantic_config_fingerprint(
-            config, loaded.summary.interactions_sha256
-        ),
+        config_fingerprint=_semantic_config_fingerprint(config, loaded.summary.interactions_sha256),
         split_fingerprint=_split_fingerprint(split),
         dataset=loaded.summary,
         split_method=config.split.method,
@@ -484,4 +835,5 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         confidence=config.evaluation.confidence,
         models=model_results,
         comparisons=comparisons,
+        tuning=tuning_result,
     )

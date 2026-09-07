@@ -48,9 +48,7 @@ class ItemKNN(BaseRecommender):
             for item_id in ordered:
                 updated_norm = norms_squared[item_id] + values[item_id] * values[item_id]
                 if not math.isfinite(updated_norm):
-                    raise ValidationError(
-                        "ItemKNN numeric overflow while computing item norms"
-                    )
+                    raise ValidationError("ItemKNN numeric overflow while computing item norms")
                 norms_squared[item_id] = updated_norm
             for left_index, left_id in enumerate(ordered):
                 for right_id in ordered[left_index + 1 :]:
@@ -61,16 +59,16 @@ class ItemKNN(BaseRecommender):
                             "ItemKNN numeric overflow while computing item similarities"
                         )
                     dots[pair] = updated_dot
-        similarities: dict[EntityId, dict[EntityId, float]] = {item_id: {} for item_id in self._catalog}
+        similarities: dict[EntityId, dict[EntityId, float]] = {
+            item_id: {} for item_id in self._catalog
+        }
         for (left_id, right_id), dot in dots.items():
             denominator = (
                 math.sqrt(norms_squared[left_id]) * math.sqrt(norms_squared[right_id])
                 + self.shrinkage
             )
             if not math.isfinite(denominator):
-                raise ValidationError(
-                    "ItemKNN numeric overflow in the similarity denominator"
-                )
+                raise ValidationError("ItemKNN numeric overflow in the similarity denominator")
             similarity = dot / denominator if denominator > 0 else 0.0
             if similarity > 0:
                 similarities[left_id][right_id] = similarity
@@ -142,7 +140,11 @@ class ItemKNN(BaseRecommender):
             raise SerializationError("ItemKNN model state is malformed")
         rows = model["similarities"]
         user_rows = model["user_values"]
-        if not isinstance(rows, list) or len(rows) != len(instance._catalog) or not isinstance(user_rows, list):
+        if (
+            not isinstance(rows, list)
+            or len(rows) != len(instance._catalog)
+            or not isinstance(user_rows, list)
+        ):
             raise SerializationError("ItemKNN state arrays are malformed")
         catalog = set(instance._catalog)
         similarities: dict[EntityId, dict[EntityId, float]] = {}
@@ -159,7 +161,11 @@ class ItemKNN(BaseRecommender):
                 except ValidationError as exc:
                     raise SerializationError(str(exc)) from exc
                 raw_score = entry["score"]
-                if neighbor_id not in catalog or neighbor_id == item_id or neighbor_id in restored_row:
+                if (
+                    neighbor_id not in catalog
+                    or neighbor_id == item_id
+                    or neighbor_id in restored_row
+                ):
                     raise SerializationError("ItemKNN similarity references an invalid neighbor")
                 if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
                     raise SerializationError("ItemKNN similarity must be a finite positive number")
@@ -176,7 +182,11 @@ class ItemKNN(BaseRecommender):
             similarities[item_id] = restored_row
         user_values: dict[EntityId, dict[EntityId, float]] = {}
         for row in user_rows:
-            if not isinstance(row, Mapping) or set(row) != {"user_id", "values"} or not isinstance(row["values"], list):
+            if (
+                not isinstance(row, Mapping)
+                or set(row) != {"user_id", "values"}
+                or not isinstance(row["values"], list)
+            ):
                 raise SerializationError("ItemKNN user-value row is malformed")
             try:
                 user_id = validate_entity_id(row["user_id"], "user_id")
@@ -196,17 +206,23 @@ class ItemKNN(BaseRecommender):
                 if history_item not in catalog or history_item in values:
                     raise SerializationError("ItemKNN user value references an invalid item")
                 if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-                    raise SerializationError("ItemKNN history values must be finite positive numbers")
+                    raise SerializationError(
+                        "ItemKNN history values must be finite positive numbers"
+                    )
                 value = safe_float(raw_value)
                 if not math.isfinite(value) or value <= 0:
-                    raise SerializationError("ItemKNN history values must be finite positive numbers")
+                    raise SerializationError(
+                        "ItemKNN history values must be finite positive numbers"
+                    )
                 values[history_item] = value
             if set(values) != set(instance._seen[user_id]):
                 raise SerializationError("ItemKNN history values do not match seen-item state")
             if list(values) != sorted(values, key=stable_id_key):
                 raise SerializationError("ItemKNN history values are not in stable order")
             user_values[user_id] = values
-        if set(user_values) != set(instance._seen) or list(user_values) != sorted(user_values, key=stable_id_key):
+        if set(user_values) != set(instance._seen) or list(user_values) != sorted(
+            user_values, key=stable_id_key
+        ):
             raise SerializationError("ItemKNN user-value state does not match fitted users")
         instance._similarities = similarities
         instance._user_values = user_values

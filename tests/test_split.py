@@ -50,7 +50,9 @@ class RandomSplitTests(unittest.TestCase):
 
     def test_different_seeds_change_partition(self) -> None:
         dataset = sample_dataset()
-        self.assertNotEqual(random_split(dataset, 0.25, 1).test, random_split(dataset, 0.25, 2).test)
+        self.assertNotEqual(
+            random_split(dataset, 0.25, 1).test, random_split(dataset, 0.25, 2).test
+        )
 
     def test_split_preserves_every_record_once(self) -> None:
         dataset = sample_dataset()
@@ -146,7 +148,10 @@ class LeaveOneOutTests(unittest.TestCase):
 
     def test_missing_timestamp_falls_back_to_input_order(self) -> None:
         dataset = InteractionDataset(
-            [Interaction("u", "timestamped", timestamp=99), Interaction("u", "last", timestamp=None)]
+            [
+                Interaction("u", "timestamped", timestamp=99),
+                Interaction("u", "last", timestamp=None),
+            ]
         )
         self.assertEqual(leave_one_out(dataset).test[0].item_id, "last")
 

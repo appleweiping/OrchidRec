@@ -114,8 +114,7 @@ class ExposureModel:
             propensity = self.propensities[validated]
         except KeyError:
             raise ValidationError(
-                f"item {validated!r} has no propensity; "
-                f"it was absent from the exposure model"
+                f"item {validated!r} has no propensity; it was absent from the exposure model"
             ) from None
         return 1.0 / propensity
 

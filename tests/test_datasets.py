@@ -52,9 +52,7 @@ class DatasetAdapterTests(unittest.TestCase):
     def test_json_adapter_summarizes_missing_timestamps(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "interactions.json"
-            expected = InteractionDataset(
-                [Interaction("u", "a", 2.0), Interaction("v", "b", 3.0)]
-            )
+            expected = InteractionDataset([Interaction("u", "a", 2.0), Interaction("v", "b", 3.0)])
             expected.save_json(path)
             loaded = load_json_dataset(path)
             through_dispatch = load_dataset(path, format="orchidrec-json")
@@ -67,9 +65,7 @@ class DatasetAdapterTests(unittest.TestCase):
 
     def test_json_directory_uses_interactions_filename(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            InteractionDataset([Interaction(1, 2)]).save_json(
-                Path(directory) / "interactions.json"
-            )
+            InteractionDataset([Interaction(1, 2)]).save_json(Path(directory) / "interactions.json")
             loaded = load_dataset(directory, format="orchidrec-json")
         self.assertEqual(len(loaded.dataset), 1)
 

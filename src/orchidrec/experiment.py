@@ -86,11 +86,16 @@ class ExperimentResult:
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(
-                json.dumps(self.to_dict(), indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n",
+                json.dumps(
+                    self.to_dict(), indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+                )
+                + "\n",
                 encoding="utf-8",
             )
         except (OSError, TypeError, ValueError) as exc:
-            raise SerializationError(f"could not write experiment report to {destination}: {exc}") from exc
+            raise SerializationError(
+                f"could not write experiment report to {destination}: {exc}"
+            ) from exc
 
 
 def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) -> BaseRecommender:
@@ -153,9 +158,7 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         evaluated_test_size += 1
         relevant_sets.setdefault(event.user_id, set()).add(event.item_id)
     if not relevant_sets:
-        raise ConfigurationError(
-            "test data contains no items present in the training catalog"
-        )
+        raise ConfigurationError("test data contains no items present in the training catalog")
     recommendation_ids: dict[EntityId, list[EntityId]] = {}
     user_rows: list[UserEvaluation] = []
     for user_id in sorted(relevant_sets, key=stable_id_key):

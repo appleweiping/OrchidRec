@@ -91,9 +91,7 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(self.dataset.item_counts(weighted=True), {"a": 1.0, "b": 5.0})
 
     def test_weighted_item_count_overflow_is_rejected(self) -> None:
-        dataset = InteractionDataset(
-            [Interaction("u1", "a", 1e308), Interaction("u2", "a", 1e308)]
-        )
+        dataset = InteractionDataset([Interaction("u1", "a", 1e308), Interaction("u2", "a", 1e308)])
         with self.assertRaises(ValidationError):
             dataset.item_counts(weighted=True)
 

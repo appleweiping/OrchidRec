@@ -20,7 +20,9 @@ class SplitResult:
     test: InteractionDataset
 
     def __post_init__(self) -> None:
-        if not isinstance(self.train, InteractionDataset) or not isinstance(self.test, InteractionDataset):
+        if not isinstance(self.train, InteractionDataset) or not isinstance(
+            self.test, InteractionDataset
+        ):
             raise SplitError("train and test must be InteractionDataset instances")
         train_pairs = {(event.user_id, event.item_id) for event in self.train}
         test_pairs = {(event.user_id, event.item_id) for event in self.test}
@@ -44,7 +46,9 @@ def _test_size(length: int, test_ratio: float) -> int:
     return max(1, min(length - 1, rounded))
 
 
-def random_split(dataset: InteractionDataset, test_ratio: float = 0.2, seed: int = 42) -> SplitResult:
+def random_split(
+    dataset: InteractionDataset, test_ratio: float = 0.2, seed: int = 42
+) -> SplitResult:
     """Select seeded user-item groups and preserve event order in each partition."""
 
     if not isinstance(dataset, InteractionDataset):
@@ -69,12 +73,10 @@ def random_split(dataset: InteractionDataset, test_ratio: float = 0.2, seed: int
         key=lambda length: (abs(prefix_sizes[length - 1] - n_test), length),
     )
     selected_pairs = set(pairs[:prefix_length])
-    test_indices = frozenset(
-        index
-        for pair in selected_pairs
-        for index in indices_by_pair[pair]
+    test_indices = frozenset(index for pair in selected_pairs for index in indices_by_pair[pair])
+    train = InteractionDataset(
+        event for index, event in enumerate(dataset) if index not in test_indices
     )
-    train = InteractionDataset(event for index, event in enumerate(dataset) if index not in test_indices)
     test = InteractionDataset(event for index, event in enumerate(dataset) if index in test_indices)
     return SplitResult(train=train, test=test)
 
@@ -105,9 +107,7 @@ def temporal_split(dataset: InteractionDataset, test_ratio: float = 0.2) -> Spli
         if crossing_pairs == 0:
             valid_boundaries.append(boundary)
     if not valid_boundaries:
-        raise SplitError(
-            "no temporal boundary can keep repeated user-item pairs in one partition"
-        )
+        raise SplitError("no temporal boundary can keep repeated user-item pairs in one partition")
     boundary = min(
         valid_boundaries,
         key=lambda candidate: (abs((len(ordered) - candidate) - n_test), candidate),
@@ -143,9 +143,9 @@ def leave_one_out(dataset: InteractionDataset) -> SplitResult:
         else:
             held_out = indices[-1]
         held_out_item = dataset[held_out].item_id
-        test_indices.update(
-            index for index in indices if dataset[index].item_id == held_out_item
-        )
-    train = InteractionDataset(event for index, event in enumerate(dataset) if index not in test_indices)
+        test_indices.update(index for index in indices if dataset[index].item_id == held_out_item)
+    train = InteractionDataset(
+        event for index, event in enumerate(dataset) if index not in test_indices
+    )
     test = InteractionDataset(event for index, event in enumerate(dataset) if index in test_indices)
     return SplitResult(train=train, test=test)

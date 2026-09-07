@@ -117,21 +117,23 @@ flowchart LR
     A[JSON or local MovieLens ratings] --> B[Strict adapter and immutable dataset]
     B --> B2[Source and normalized SHA-256]
     B --> C[Stable user and item ID maps]
-    C --> D{Split strategy}
-    D -->|random| E[Train / test]
+    C --> D{Outer split strategy}
+    D -->|random| E[Development / test]
     D -->|temporal| E
     D -->|leave-one-out| E
-    E --> F{Model}
-    F -->|Popularity| G[Candidate scores]
-    F -->|ItemKNN| G
-    F -->|ImplicitMF / BPR| G
+    E --> N{Optional tuning}
+    N -->|inner split| O[Training / validation]
+    O -->|select only on validation| F[Selected parameters]
+    N -->|disabled| F
+    F -->|Popularity / ItemKNN / ImplicitMF| P[Refit on development]
+    P -->|one final test evaluation| G[Candidate scores]
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
     H --> J[Coverage Novelty]
     I --> K[User bootstrap and paired comparisons]
     J --> K
     K --> M[JSON / tidy CSV / standalone HTML]
-    F --> L[Versioned JSON model]
+    P --> L[Versioned JSON model]
 ```
 
 The modules have deliberately narrow responsibilities:
@@ -149,8 +151,8 @@ The modules have deliberately narrow responsibilities:
   file location.
 - `experiment.py` joins the pieces without adding wall-clock timestamps or
   other nondeterministic report fields.
-- `benchmark.py` fits multiple models on exactly one split and one shared
-  bootstrap resampling plan.
+- `benchmark.py` optionally selects models on a nested validation split, then
+  evaluates final refits on one shared outer test split and bootstrap plan.
 - `statistics.py` provides deterministic percentile intervals and paired mean
   comparisons independently of the recommender classes.
 - `reporting.py` atomically writes strict JSON, tidy CSV, and self-contained
@@ -334,6 +336,79 @@ corrected exploratory two-sided p-value. These values quantify uncertainty in
 this particular offline sample; they are not a substitute for multiple-test
 correction, online experiments, or a causal claim.
 
+### Leakage-safe hyperparameter selection
+
+The benchmark configuration can opt into a finite, explicit Cartesian-product
+grid. The outer split is made first and its test partition is sealed. OrchidRec
+then splits only the outer training partition into inner training and
+validation partitions, selects each model using validation results, refits the
+selected parameters on the complete outer training partition (training plus
+validation), and evaluates that final fit on the test partition exactly once.
+The following is the `tuning` and `models` portion of a benchmark configuration;
+the required schema, data, outer split, and evaluation fields remain as shown
+in the complete MovieLens example above.
+
+```json
+{
+  "tuning": {
+    "selection_metric": "ndcg",
+    "direction": "maximize",
+    "validation_split": {
+      "method": "leave_one_out",
+      "validation_ratio": 0.2
+    },
+    "implicit_mf_seeds": [2026, 2027, 2028]
+  },
+  "models": [
+    {
+      "label": "popularity",
+      "name": "popularity",
+      "grid": {"weighted": [false, true]}
+    },
+    {
+      "label": "item-knn",
+      "name": "item_knn",
+      "grid": {"neighbors": [20, 40], "shrinkage": [0.0, 10.0]}
+    },
+    {
+      "label": "bpr-mf",
+      "name": "implicit_mf",
+      "params": {"negative_samples": 1},
+      "grid": {"factors": [8, 16], "epochs": [5, 10]}
+    }
+  ]
+}
+```
+
+`params` are fixed values and `grid` contains the values to search; the same
+parameter cannot occur in both. A tuning configuration requires at least one
+model grid, and each grid expands to at most 128 candidates. A model without a
+grid participates as one fixed candidate, which is useful for untuned baselines.
+Candidate order is canonical by parameter name, while value-array order breaks
+equal-score ties deterministically. All six metrics can be selected; `direction`
+accepts `maximize` or `minimize` and defaults to `maximize` when omitted.
+As with the outer split, `validation_ratio` is validated but ignored by
+`leave_one_out`.
+
+Popularity and ItemKNN are deterministic and therefore run once per candidate.
+ImplicitMF runs every candidate once for each distinct
+`implicit_mf_seeds` value and selection uses the arithmetic mean of that
+validation metric; one to sixteen unique integer seeds are accepted. Those
+seeds are validation repeats only. Model-level
+`implicit_mf.seed` is rejected when tuning is active; the final refit always
+uses the benchmark's top-level `seed`, making the single final test evaluation
+unambiguous. Tuning timings are observational, just like final benchmark
+timings.
+
+The JSON report records the exact search space, every candidate and trial,
+effective parameters, all validation metrics, trial timing, selected score and
+final parameters. It also records SHA-256 fingerprints for the source and
+normalized data, semantic configuration, development/training/validation/test
+partitions, outer split, and combined three-way split. The tuned CSV adds
+candidate and trial rows, and the standalone HTML adds the selection table.
+If `tuning` and model `grid` fields are absent, configuration normalization,
+execution, and report shape remain unchanged.
+
 ## Experiment configuration
 
 ```json
@@ -385,12 +460,14 @@ data/config/model errors are printed to standard error with exit code `2`.
 ```python
 from orchidrec import Interaction, InteractionDataset, ItemKNN
 
-events = InteractionDataset([
-    Interaction("u1", "a"),
-    Interaction("u1", "b"),
-    Interaction("u2", "a"),
-    Interaction("u2", "c"),
-])
+events = InteractionDataset(
+    [
+        Interaction("u1", "a"),
+        Interaction("u1", "b"),
+        Interaction("u2", "a"),
+        Interaction("u2", "c"),
+    ]
+)
 
 model = ItemKNN(neighbors=10, shrinkage=1.0).fit(events)
 for recommendation in model.recommend("u1", k=5):
@@ -446,8 +523,9 @@ fields. Neither runner changes Python's process-global random state.
   from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration and ImplicitMF uses simple SGD,
   not optimized native kernels. Full MovieLens 1M runs can therefore be slow.
-- There is no feature store, distributed execution, online serving layer, or
-  hyperparameter search.
+- There is no feature store, distributed execution, or online serving layer.
+- Hyperparameter search is deliberately limited to explicit finite grids; it
+  does not implement adaptive, Bayesian, distributed, or test-informed search.
 - Offline holdout metrics assume unobserved items are candidates. Exposure and
   selection bias are corrected only when a run declares an exposure model, and
   then only as well as that model describes the logging policy that produced the
@@ -482,7 +560,9 @@ training, ranking semantics, all metrics, strict configuration, serialization
 tampering, MovieLens format failures, content hashes, deterministic bootstrap
 statistics, paired comparisons, portable report formats, CLI exit behavior,
 and end-to-end runs for every included model.
-See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes and
+[the release process](docs/releasing.md) for clean-install, SBOM, checksum,
+and build-provenance guarantees.
 
 ## Algorithm reference
 

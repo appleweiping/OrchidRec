@@ -40,12 +40,12 @@ def _parser() -> argparse.ArgumentParser:
 
     recommend = subparsers.add_parser("recommend", help="recommend from a saved model")
     recommend.add_argument("model", type=Path)
-    recommend.add_argument("user_id", help="JSON scalar ID, for example 42 or \"alice\"")
+    recommend.add_argument("user_id", help='JSON scalar ID, for example 42 or "alice"')
     recommend.add_argument("--k", type=int, default=10)
     recommend.add_argument("--include-seen", action="store_true")
 
     benchmark = subparsers.add_parser(
-        "benchmark", help="compare configured models on one shared split"
+        "benchmark", help="compare and optionally tune models on a sealed test split"
     )
     benchmark.add_argument("config", type=Path)
     benchmark.add_argument("--output-dir", type=Path, default=Path("artifacts/benchmark"))
@@ -132,6 +132,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for model in benchmark_result.models
                 ],
             }
+            if benchmark_result.tuning is not None:
+                summary["tuning"] = {
+                    "selection_metric": benchmark_result.tuning.selection_metric,
+                    "direction": benchmark_result.tuning.direction,
+                    "three_way_split_sha256": (benchmark_result.tuning.three_way_split_fingerprint),
+                    "selected_models": [
+                        {
+                            "label": model.label,
+                            "validation_score": model.selected_validation_score,
+                            "final_parameters": dict(model.final_parameters),
+                        }
+                        for model in benchmark_result.tuning.models
+                    ],
+                }
             print(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False))
             return 0
         if args.command == "dataset-summary":

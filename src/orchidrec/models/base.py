@@ -150,7 +150,9 @@ class BaseRecommender(ABC):
         if isinstance(candidates, (str, bytes)):
             raise ValidationError("candidates must be an iterable of item IDs, not a string")
         try:
-            materialized = tuple(validate_entity_id(value, "candidate item ID") for value in candidates)
+            materialized = tuple(
+                validate_entity_id(value, "candidate item ID") for value in candidates
+            )
         except TypeError as exc:
             raise ValidationError("candidates must be an iterable of item IDs") from exc
         if len(set(materialized)) != len(materialized):
@@ -187,7 +189,11 @@ class BaseRecommender(ABC):
         catalog_raw = state["catalog"]
         popularity_raw = state["popularity"]
         users_raw = state["users"]
-        if not isinstance(catalog_raw, list) or not isinstance(popularity_raw, list) or not isinstance(users_raw, list):
+        if (
+            not isinstance(catalog_raw, list)
+            or not isinstance(popularity_raw, list)
+            or not isinstance(users_raw, list)
+        ):
             raise SerializationError("base model arrays are malformed")
         try:
             catalog_map = StableIdMap.from_state({"ids": catalog_raw})
@@ -213,14 +219,19 @@ class BaseRecommender(ABC):
                 raise SerializationError("user seen-item state is malformed")
             try:
                 user_id = validate_entity_id(entry["user_id"], "user_id")
-                seen_items = tuple(validate_entity_id(value, "seen item ID") for value in entry["seen"])
+                seen_items = tuple(
+                    validate_entity_id(value, "seen item ID") for value in entry["seen"]
+                )
             except ValidationError as exc:
                 raise SerializationError(str(exc)) from exc
             if user_id in seen:
                 raise SerializationError("duplicate user in seen-item state")
             if not seen_items:
                 raise SerializationError("user seen-item state must not be empty")
-            if len(set(seen_items)) != len(seen_items) or list(sorted(seen_items, key=stable_id_key)) != entry["seen"]:
+            if (
+                len(set(seen_items)) != len(seen_items)
+                or list(sorted(seen_items, key=stable_id_key)) != entry["seen"]
+            ):
                 raise SerializationError("seen-item IDs must be unique and stably sorted")
             if not set(seen_items).issubset(set(catalog_map.ids)):
                 raise SerializationError("seen-item state references an unknown catalog item")
@@ -268,8 +279,14 @@ def parse_envelope(
     ):
         raise SerializationError("unsupported OrchidRec model format or schema version")
     if state["model_type"] != expected_type:
-        raise SerializationError(f"expected model type {expected_type!r}, got {state['model_type']!r}")
+        raise SerializationError(
+            f"expected model type {expected_type!r}, got {state['model_type']!r}"
+        )
     parameters, base, model = state["parameters"], state["base"], state["model"]
-    if not isinstance(parameters, Mapping) or not isinstance(base, Mapping) or not isinstance(model, Mapping):
+    if (
+        not isinstance(parameters, Mapping)
+        or not isinstance(base, Mapping)
+        or not isinstance(model, Mapping)
+    ):
         raise SerializationError("parameters, base, and model state must be objects")
     return parameters, base, model

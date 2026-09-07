@@ -33,7 +33,11 @@ class ImplicitMF(BaseRecommender):
             raise ValidationError("factors must be a positive integer")
         if isinstance(epochs, bool) or not isinstance(epochs, int) or epochs <= 0:
             raise ValidationError("epochs must be a positive integer")
-        if isinstance(negative_samples, bool) or not isinstance(negative_samples, int) or negative_samples <= 0:
+        if (
+            isinstance(negative_samples, bool)
+            or not isinstance(negative_samples, int)
+            or negative_samples <= 0
+        ):
             raise ValidationError("negative_samples must be a positive integer")
         if isinstance(seed, bool) or not isinstance(seed, int):
             raise ValidationError("seed must be an integer")
@@ -66,7 +70,8 @@ class ImplicitMF(BaseRecommender):
             user_id: [rng.uniform(-scale, scale) for _ in range(self.factors)] for user_id in users
         }
         self._item_factors = {
-            item_id: [rng.uniform(-scale, scale) for _ in range(self.factors)] for item_id in self._catalog
+            item_id: [rng.uniform(-scale, scale) for _ in range(self.factors)]
+            for item_id in self._catalog
         }
         self._item_bias = {item_id: 0.0 for item_id in self._catalog}
         positives = [
@@ -75,7 +80,9 @@ class ImplicitMF(BaseRecommender):
             for item_id in sorted(self._seen[user_id], key=stable_id_key)
         ]
         negatives = {
-            user_id: tuple(item_id for item_id in self._catalog if item_id not in self._seen[user_id])
+            user_id: tuple(
+                item_id for item_id in self._catalog if item_id not in self._seen[user_id]
+            )
             for user_id in users
         }
         for _epoch in range(self.epochs):
@@ -116,12 +123,21 @@ class ImplicitMF(BaseRecommender):
         regularization = self.regularization
         for index in range(self.factors):
             user[index] += rate * (
-                gradient * (old_positive[index] - old_negative[index]) - regularization * old_user[index]
+                gradient * (old_positive[index] - old_negative[index])
+                - regularization * old_user[index]
             )
-            positive[index] += rate * (gradient * old_user[index] - regularization * old_positive[index])
-            negative[index] += rate * (-gradient * old_user[index] - regularization * old_negative[index])
-        self._item_bias[positive_id] += rate * (gradient - regularization * self._item_bias[positive_id])
-        self._item_bias[negative_id] += rate * (-gradient - regularization * self._item_bias[negative_id])
+            positive[index] += rate * (
+                gradient * old_user[index] - regularization * old_positive[index]
+            )
+            negative[index] += rate * (
+                -gradient * old_user[index] - regularization * old_negative[index]
+            )
+        self._item_bias[positive_id] += rate * (
+            gradient - regularization * self._item_bias[positive_id]
+        )
+        self._item_bias[negative_id] += rate * (
+            -gradient - regularization * self._item_bias[negative_id]
+        )
 
     def _score(self, user_id: EntityId, item_id: EntityId) -> float:
         user = self._user_factors.get(user_id)
@@ -195,7 +211,9 @@ class ImplicitMF(BaseRecommender):
         if set(model) != {"user_factors", "item_factors", "item_bias"}:
             raise SerializationError("ImplicitMF model state is malformed")
         users = sorted(instance._seen, key=stable_id_key)
-        user_matrix = cls._restore_matrix(model["user_factors"], len(users), instance.factors, "user_factors")
+        user_matrix = cls._restore_matrix(
+            model["user_factors"], len(users), instance.factors, "user_factors"
+        )
         item_matrix = cls._restore_matrix(
             model["item_factors"], len(instance._catalog), instance.factors, "item_factors"
         )

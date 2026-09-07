@@ -16,21 +16,33 @@
     "bootstrap_samples": 20,
     "confidence": 0.9
   },
+  "tuning": {
+    "selection_metric": "ndcg",
+    "direction": "maximize",
+    "validation_split": {
+      "method": "leave_one_out",
+      "validation_ratio": 0.2
+    },
+    "implicit_mf_seeds": [2026, 2027]
+  },
   "models": [
     {
       "label": "popularity",
       "name": "popularity",
-      "params": {"weighted": false}
+      "params": {},
+      "grid": {"weighted": [false, true]}
     },
     {
       "label": "item-knn",
       "name": "item_knn",
-      "params": {"neighbors": 5, "shrinkage": 1.0}
+      "params": {},
+      "grid": {"neighbors": [3, 5], "shrinkage": [0.0, 1.0]}
     },
     {
       "label": "bpr-mf",
       "name": "implicit_mf",
-      "params": {"factors": 4, "epochs": 3, "negative_samples": 1}
+      "params": {"negative_samples": 1},
+      "grid": {"factors": [2, 4], "epochs": [2, 3]}
     }
   ]
 }

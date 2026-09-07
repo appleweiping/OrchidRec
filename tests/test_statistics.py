@@ -36,9 +36,7 @@ class BootstrapStatisticsTests(unittest.TestCase):
             interval_from_draws(True, [1], confidence=0.9)
 
     def test_paired_bootstrap_detects_consistent_improvement(self) -> None:
-        result = paired_bootstrap_mean(
-            [1, 2, 3], [2, 3, 4], samples=99, confidence=0.95, seed=8
-        )
+        result = paired_bootstrap_mean([1, 2, 3], [2, 3, 4], samples=99, confidence=0.95, seed=8)
         self.assertEqual(result.left_mean, 2.0)
         self.assertEqual(result.right_mean, 3.0)
         self.assertEqual(result.difference.estimate, 1.0)
@@ -79,13 +77,12 @@ class BootstrapStatisticsTests(unittest.TestCase):
 
     def test_invalid_bootstrap_options_are_rejected(self) -> None:
         for samples in (0, -1, True, 1.5):
-            with self.subTest(samples=samples), self.assertRaisesRegex(
-                ValidationError, "samples"
-            ):
+            with self.subTest(samples=samples), self.assertRaisesRegex(ValidationError, "samples"):
                 bootstrap_mean([1], samples=samples)  # type: ignore[arg-type]
         for confidence in (0, 1, True, float("nan"), float("inf"), 10**400):
-            with self.subTest(confidence=confidence), self.assertRaisesRegex(
-                ValidationError, "confidence"
+            with (
+                self.subTest(confidence=confidence),
+                self.assertRaisesRegex(ValidationError, "confidence"),
             ):
                 bootstrap_mean([1], confidence=confidence)  # type: ignore[arg-type]
         with self.assertRaisesRegex(ValidationError, "seed"):

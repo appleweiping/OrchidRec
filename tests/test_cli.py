@@ -56,7 +56,9 @@ class CliTests(unittest.TestCase):
     def test_recommend_command_accepts_unquoted_string_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = run_demo(directory)
-            code, stdout, _ = self.invoke("recommend", str(artifacts.model_path), "new-user", "--k", "2")
+            code, stdout, _ = self.invoke(
+                "recommend", str(artifacts.model_path), "new-user", "--k", "2"
+            )
             self.assertEqual(code, 0)
             self.assertEqual(len(json.loads(stdout)), 2)
 
@@ -157,9 +159,26 @@ class CliTests(unittest.TestCase):
                             "minimum_rating": 4,
                         },
                         "evaluation": {"k": 3, "bootstrap_samples": 3},
+                        "tuning": {
+                            "selection_metric": "ndcg",
+                            "direction": "maximize",
+                            "validation_split": {
+                                "method": "leave_one_out",
+                                "validation_ratio": 0.2,
+                            },
+                            "implicit_mf_seeds": [3],
+                        },
                         "models": [
-                            {"label": "pop", "name": "popularity"},
-                            {"label": "knn", "name": "item_knn", "params": {"neighbors": 2}},
+                            {
+                                "label": "pop",
+                                "name": "popularity",
+                                "grid": {"weighted": [False, True]},
+                            },
+                            {
+                                "label": "knn",
+                                "name": "item_knn",
+                                "grid": {"neighbors": [2, 3]},
+                            },
                         ],
                     }
                 ),
@@ -172,6 +191,9 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(stderr, "")
             self.assertEqual(len(payload["models"]), 2)
+            self.assertEqual(payload["tuning"]["selection_metric"], "ndcg")
+            self.assertEqual(len(payload["tuning"]["three_way_split_sha256"]), 64)
+            self.assertEqual(len(payload["tuning"]["selected_models"]), 2)
             for path in payload["reports"].values():
                 self.assertTrue(Path(path).is_file())
 

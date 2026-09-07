@@ -162,7 +162,9 @@ class InteractionDataset(Sequence[Interaction]):
                 encoding="utf-8",
             )
         except OSError as exc:
-            raise SerializationError(f"could not write interactions to {destination}: {exc}") from exc
+            raise SerializationError(
+                f"could not write interactions to {destination}: {exc}"
+            ) from exc
 
     def to_records(self) -> list[dict[str, EntityId | float | None]]:
         """Return all events as independent JSON-compatible mappings."""
@@ -193,7 +195,9 @@ class InteractionDataset(Sequence[Interaction]):
         """Return items observed for ``user_id``; unknown users yield an empty set."""
 
         validate_entity_id(user_id, "user_id")
-        return frozenset(interaction.item_id for interaction in self if interaction.user_id == user_id)
+        return frozenset(
+            interaction.item_id for interaction in self if interaction.user_id == user_id
+        )
 
     def item_counts(self, *, weighted: bool = False) -> dict[EntityId, float]:
         """Count item events, optionally summing interaction values."""
@@ -220,7 +224,9 @@ class StableIdMap:
         try:
             materialized = tuple(ids)
             canonical = tuple(
-                sorted({validate_entity_id(entity_id) for entity_id in materialized}, key=stable_id_key)
+                sorted(
+                    {validate_entity_id(entity_id) for entity_id in materialized}, key=stable_id_key
+                )
             )
         except TypeError as exc:
             raise ValidationError("IDs must be an iterable of strings or integers") from exc
@@ -293,7 +299,11 @@ class StableIdMap:
     def from_state(cls, state: Mapping[str, Any]) -> StableIdMap:
         """Restore and validate a serialized stable map."""
 
-        if not isinstance(state, Mapping) or set(state) != {"ids"} or not isinstance(state["ids"], list):
+        if (
+            not isinstance(state, Mapping)
+            or set(state) != {"ids"}
+            or not isinstance(state["ids"], list)
+        ):
             raise SerializationError("ID map state must contain only an 'ids' array")
         try:
             restored = cls.from_values(state["ids"])

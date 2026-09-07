@@ -20,27 +20,44 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.31"
+          enable-cache: true
       - name: Install package
-        run: python -m pip install .
+        run: uv sync --locked
       - name: Compile source
-        run: python -m compileall -q src tests examples
+        run: uv run --locked python -m compileall -q src tests examples
       - name: Run tests
-        run: python -m unittest discover -s tests -v
+        run: uv run --locked python -m unittest discover -s tests -v
       - name: Run installed CLI smoke test
-        run: orchidrec demo --output-dir artifacts/ci-demo
+        run: uv run --locked orchidrec demo --output-dir artifacts/ci-demo
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run shared-split benchmark smoke test
-        run: orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/ci-benchmark
+        run: uv run --locked orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/ci-benchmark
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Install quality tools
-        run: python -m pip install ".[dev]"
+        run: uv sync --locked --extra dev
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: ruff check src tests examples
+        run: uv run --locked ruff check src tests examples
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: mypy src
+        run: uv run --locked ruff format --check src tests examples
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: bandit -q -c pyproject.toml -r src
+        run: uv run --locked mypy src
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: coverage run -m unittest discover -s tests && coverage report
+        run: uv run --locked bandit -q -c pyproject.toml -r src
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: python -m build
+        run: uv audit --locked
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: uv run --locked coverage run -m unittest discover -s tests && uv run --locked coverage report
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: uv run --locked python -m build --no-isolation
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Verify the wheel in a clean environment
+        shell: bash
+        run: |
+          python -m venv .ci-wheel-check
+          .ci-wheel-check/bin/python -m pip install --disable-pip-version-check --no-deps dist/*.whl
+          .ci-wheel-check/bin/python -c "import orchidrec; print(orchidrec.__version__)"
+          .ci-wheel-check/bin/orchidrec --help

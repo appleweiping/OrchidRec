@@ -176,9 +176,7 @@ class ItemKNNTests(unittest.TestCase):
                 ItemKNN(shrinkage=value)
 
     def test_numeric_overflow_during_similarity_training_is_rejected(self) -> None:
-        dataset = InteractionDataset(
-            [Interaction("u", "a", 1e200), Interaction("u", "b", 1e200)]
-        )
+        dataset = InteractionDataset([Interaction("u", "a", 1e200), Interaction("u", "b", 1e200)])
         with self.assertRaises(ValidationError):
             ItemKNN(shrinkage=0).fit(dataset)
 
@@ -239,8 +237,12 @@ class ImplicitMFTests(unittest.TestCase):
                 ImplicitMF(**parameters)  # type: ignore[arg-type]
 
     def test_more_epochs_change_fitted_state(self) -> None:
-        short = ImplicitMF(factors=3, epochs=1, seed=3).fit(collaborative_dataset()).to_state()["model"]
-        long = ImplicitMF(factors=3, epochs=4, seed=3).fit(collaborative_dataset()).to_state()["model"]
+        short = (
+            ImplicitMF(factors=3, epochs=1, seed=3).fit(collaborative_dataset()).to_state()["model"]
+        )
+        long = (
+            ImplicitMF(factors=3, epochs=4, seed=3).fit(collaborative_dataset()).to_state()["model"]
+        )
         self.assertNotEqual(short, long)
 
     def test_bpr_training_ranks_each_observed_item_above_negatives(self) -> None:

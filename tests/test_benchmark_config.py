@@ -26,8 +26,56 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual(config.data.minimum_rating, 4.0)
         self.assertEqual(config.split.method, "leave_one_out")
         self.assertEqual(config.evaluation.bootstrap_samples, 1_000)
-        self.assertEqual([model.label for model in config.models], ["popularity", "item-knn", "bpr-mf"])
+        self.assertEqual(
+            [model.label for model in config.models], ["popularity", "item-knn", "bpr-mf"]
+        )
         self.assertEqual(config.to_dict()["schema_version"], 1)
+        self.assertNotIn("tuning", config.to_dict())
+        self.assertNotIn("grid", config.to_dict()["models"][0])  # type: ignore[index]
+
+    def test_tuning_and_all_builtin_grids_round_trip(self) -> None:
+        payload = self.minimal()
+        payload.update(
+            {
+                "seed": 9,
+                "tuning": {
+                    "selection_metric": "recall",
+                    "direction": "minimize",
+                    "validation_split": {
+                        "method": "random",
+                        "validation_ratio": 0.25,
+                    },
+                    "implicit_mf_seeds": [7, 8],
+                },
+                "models": [
+                    {
+                        "label": "pop",
+                        "name": "popularity",
+                        "params": {},
+                        "grid": {"weighted": [False, True]},
+                    },
+                    {
+                        "label": "knn",
+                        "name": "item_knn",
+                        "params": {},
+                        "grid": {"neighbors": [2, 4], "shrinkage": [0.0, 1.0]},
+                    },
+                    {
+                        "label": "mf",
+                        "name": "implicit_mf",
+                        "params": {"negative_samples": 1},
+                        "grid": {"epochs": [1, 2], "factors": [2, 3]},
+                    },
+                ],
+            }
+        )
+        config = benchmark_config_from_dict(payload)
+        self.assertIsNotNone(config.tuning)
+        assert config.tuning is not None
+        self.assertEqual(config.tuning.implicit_mf_seeds, (7, 8))
+        self.assertEqual(config.tuning.validation_split.validation_ratio, 0.25)
+        self.assertEqual(config.models[1].grid["neighbors"], (2, 4))
+        self.assertEqual(benchmark_config_from_dict(config.to_dict()), config)
 
     def test_config_round_trip_preserves_normalized_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -128,15 +176,140 @@ class BenchmarkConfigTests(unittest.TestCase):
             ([{"label": "x", "name": "popularity"}] * 2, "unique"),
             ([{"label": " x", "name": "popularity"}, {"label": "y", "name": "item_knn"}], "label"),
             ([{"label": "x", "name": "bad"}, {"label": "y", "name": "item_knn"}], "name"),
-            ([{"label": "x", "name": "popularity", "extra": 1}, {"label": "y", "name": "item_knn"}], "unknown"),
-            ([{"label": "x", "name": "popularity", "params": {"bad": 1}}, {"label": "y", "name": "item_knn"}], "unknown"),
-            ([{"label": "x", "name": "popularity"}, {"label": "y", "name": "item_knn", "params": {"neighbors": 0}}], "invalid"),
+            (
+                [
+                    {"label": "x", "name": "popularity", "extra": 1},
+                    {"label": "y", "name": "item_knn"},
+                ],
+                "unknown",
+            ),
+            (
+                [
+                    {"label": "x", "name": "popularity", "params": {"bad": 1}},
+                    {"label": "y", "name": "item_knn"},
+                ],
+                "unknown",
+            ),
+            (
+                [
+                    {"label": "x", "name": "popularity"},
+                    {"label": "y", "name": "item_knn", "params": {"neighbors": 0}},
+                ],
+                "invalid",
+            ),
         )
         for models, message in invalid_models:
             payload = self.minimal()
             payload["models"] = models
             with self.subTest(models=models), self.assertRaisesRegex(ConfigurationError, message):
                 benchmark_config_from_dict(payload)
+
+    def test_tuning_fields_are_strict(self) -> None:
+        invalid_tuning = (
+            ([], "JSON object"),
+            ({"extra": 1}, "unknown tuning"),
+            ({"selection_metric": "loss"}, "selection_metric"),
+            ({"direction": "sideways"}, "direction"),
+            ({"validation_split": []}, "JSON object"),
+            ({"validation_split": {"extra": 1}}, "unknown"),
+            ({"validation_split": {"method": "future"}}, "method"),
+            ({"validation_split": {"validation_ratio": 1}}, "between"),
+            ({"implicit_mf_seeds": []}, "non-empty"),
+            ({"implicit_mf_seeds": [True]}, "integer"),
+            ({"implicit_mf_seeds": [1, 1]}, "duplicates"),
+            ({"implicit_mf_seeds": list(range(17))}, "at most"),
+        )
+        for tuning, message in invalid_tuning:
+            payload = self.minimal()
+            payload["tuning"] = tuning
+            with self.subTest(tuning=tuning), self.assertRaisesRegex(ConfigurationError, message):
+                benchmark_config_from_dict(payload)
+
+    def test_grids_are_finite_explicit_and_unambiguous(self) -> None:
+        base_models: list[dict[str, object]] = [
+            {"label": "a", "name": "popularity"},
+            {"label": "b", "name": "item_knn"},
+        ]
+        invalid_grids = (
+            ({"weighted": [False, True]}, False, "requires a tuning"),
+            ({}, True, "must not be empty"),
+            ({"bad": [1]}, True, "unknown"),
+            ({"weighted": []}, True, "non-empty"),
+            ({"weighted": [False, False]}, True, "duplicate"),
+            ({"weighted": [float("nan")]}, True, "strict JSON"),
+            ({"weighted": [0]}, True, "invalid"),
+        )
+        for grid, tuning_enabled, message in invalid_grids:
+            payload = self.minimal()
+            models = [dict(model) for model in base_models]
+            models[0]["grid"] = grid
+            payload["models"] = models
+            if tuning_enabled:
+                payload["tuning"] = {}
+            with self.subTest(grid=grid), self.assertRaisesRegex(ConfigurationError, message):
+                benchmark_config_from_dict(payload)
+
+        payload = self.minimal()
+        payload["tuning"] = {}
+        payload["models"] = [
+            {
+                "label": "a",
+                "name": "item_knn",
+                "params": {"neighbors": 2},
+                "grid": {"neighbors": [3]},
+            },
+            {"label": "b", "name": "popularity"},
+        ]
+        with self.assertRaisesRegex(ConfigurationError, "both params and grid"):
+            benchmark_config_from_dict(payload)
+
+        payload["models"] = [
+            {
+                "label": "a",
+                "name": "item_knn",
+                "grid": {"neighbors": list(range(1, 129)), "shrinkage": [0.0, 1.0]},
+            },
+            {"label": "b", "name": "popularity"},
+        ]
+        with self.assertRaisesRegex(ConfigurationError, "beyond 128"):
+            benchmark_config_from_dict(payload)
+
+    def test_grid_rejects_numerically_equivalent_float_values(self) -> None:
+        payload = self.minimal()
+        payload["tuning"] = {"selection_metric": "ndcg", "direction": "maximize"}
+        for values in ([0, 0.0], [-0.0, 0.0]):
+            payload["models"] = [
+                {
+                    "label": "knn",
+                    "name": "item_knn",
+                    "grid": {"shrinkage": values},
+                }
+            ]
+            with (
+                self.subTest(values=values),
+                self.assertRaisesRegex(ConfigurationError, "semantically duplicate"),
+            ):
+                benchmark_config_from_dict(payload)
+
+    def test_tuned_implicit_mf_seed_has_one_unambiguous_owner(self) -> None:
+        for model in (
+            {"label": "mf", "name": "implicit_mf", "params": {"seed": 3}},
+            {"label": "mf", "name": "implicit_mf", "grid": {"seed": [3, 4]}},
+        ):
+            payload = self.minimal()
+            payload["tuning"] = {"implicit_mf_seeds": [3, 4]}
+            payload["models"] = [model, {"label": "pop", "name": "popularity"}]
+            with (
+                self.subTest(model=model),
+                self.assertRaisesRegex(ConfigurationError, "top-level seed for final fit"),
+            ):
+                benchmark_config_from_dict(payload)
+
+    def test_tuning_requires_at_least_one_search_grid(self) -> None:
+        payload = self.minimal()
+        payload["tuning"] = {}
+        with self.assertRaisesRegex(ConfigurationError, "at least one model grid"):
+            benchmark_config_from_dict(payload)
 
     def test_seed_and_mapping_keys_are_validated(self) -> None:
         payload = self.minimal()

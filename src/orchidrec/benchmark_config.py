@@ -16,6 +16,9 @@ from orchidrec.errors import ConfigurationError, ValidationError
 from orchidrec.models import ImplicitMF, ItemKNN, Popularity
 
 BENCHMARK_CONFIG_SCHEMA_VERSION = 1
+BENCHMARK_METRIC_NAMES = ("precision", "recall", "ndcg", "mrr", "coverage", "novelty")
+MAX_GRID_CANDIDATES = 128
+MAX_IMPLICIT_MF_SEEDS = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,13 +43,50 @@ class BenchmarkEvaluationConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class BenchmarkValidationSplitConfig:
+    """The inner split used exclusively for hyperparameter selection."""
+
+    method: str = "leave_one_out"
+    validation_ratio: float = 0.2
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkTuningConfig:
+    """Leakage-safe model-selection settings for an optional benchmark grid."""
+
+    selection_metric: str
+    direction: str
+    validation_split: BenchmarkValidationSplitConfig
+    implicit_mf_seeds: tuple[int, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "selection_metric": self.selection_metric,
+            "direction": self.direction,
+            "validation_split": {
+                "method": self.validation_split.method,
+                "validation_ratio": self.validation_split.validation_ratio,
+            },
+            "implicit_mf_seeds": list(self.implicit_mf_seeds),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class BenchmarkModelSpec:
     label: str
     name: str
     params: dict[str, Any] = field(default_factory=dict)
+    grid: dict[str, tuple[Any, ...]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
-        return {"label": self.label, "name": self.name, "params": dict(self.params)}
+        payload: dict[str, object] = {
+            "label": self.label,
+            "name": self.name,
+            "params": dict(self.params),
+        }
+        if self.grid:
+            payload["grid"] = {name: list(values) for name, values in self.grid.items()}
+        return payload
 
 
 def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
@@ -72,9 +112,10 @@ class BenchmarkConfig:
     split: BenchmarkSplitConfig
     evaluation: BenchmarkEvaluationConfig
     models: tuple[BenchmarkModelSpec, ...]
+    tuning: BenchmarkTuningConfig | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "schema_version": BENCHMARK_CONFIG_SCHEMA_VERSION,
             "seed": self.seed,
             "data": {
@@ -94,6 +135,9 @@ class BenchmarkConfig:
             },
             "models": [model.to_dict() for model in self.models],
         }
+        if self.tuning is not None:
+            payload["tuning"] = self.tuning.to_dict()
+        return payload
 
 
 def _object(value: object, name: str) -> Mapping[str, Any]:
@@ -123,9 +167,36 @@ def _positive_int(value: object, name: str) -> int:
     return value
 
 
-def _parse_model(entry: object, index: int, seed: int) -> BenchmarkModelSpec:
+def _validated_model_parameters(
+    name: str,
+    params: Mapping[str, Any],
+    *,
+    seed: int,
+    location: str,
+) -> None:
+    model_types = {
+        "popularity": Popularity,
+        "item_knn": ItemKNN,
+        "implicit_mf": ImplicitMF,
+    }
+    validated_params = dict(params)
+    if name == "implicit_mf":
+        validated_params.setdefault("seed", seed)
+    try:
+        model_types[name](**validated_params)
+    except (TypeError, ValidationError) as exc:
+        raise ConfigurationError(f"invalid {location}: {exc}") from exc
+
+
+def _parse_model(
+    entry: object,
+    index: int,
+    seed: int,
+    *,
+    tuning_enabled: bool,
+) -> BenchmarkModelSpec:
     model = _object(entry, f"models[{index}]")
-    _unknown(model, {"label", "name", "params"}, f"models[{index}]")
+    _unknown(model, {"label", "name", "params", "grid"}, f"models[{index}]")
     label = model.get("label")
     name = model.get("name")
     if (
@@ -154,19 +225,146 @@ def _parse_model(entry: object, index: int, seed: int) -> BenchmarkModelSpec:
         },
     }[name]
     _unknown(params, allowed, f"models[{index}].params")
-    model_types = {
-        "popularity": Popularity,
-        "item_knn": ItemKNN,
-        "implicit_mf": ImplicitMF,
-    }
-    validated_params = dict(params)
-    if name == "implicit_mf":
-        validated_params.setdefault("seed", seed)
-    try:
-        model_types[name](**validated_params)
-    except (TypeError, ValidationError) as exc:
-        raise ConfigurationError(f"invalid models[{index}].params: {exc}") from exc
-    return BenchmarkModelSpec(label=label, name=name, params=dict(params))
+    _validated_model_parameters(name, params, seed=seed, location=f"models[{index}].params")
+
+    raw_grid = model.get("grid")
+    if raw_grid is None:
+        grid: dict[str, tuple[Any, ...]] = {}
+    else:
+        if not tuning_enabled:
+            raise ConfigurationError(f"models[{index}].grid requires a tuning object")
+        grid_object = _object(raw_grid, f"models[{index}].grid")
+        if not grid_object:
+            raise ConfigurationError(f"models[{index}].grid must not be empty")
+        _unknown(grid_object, allowed, f"models[{index}].grid")
+        overlap = set(params) & set(grid_object)
+        if overlap:
+            names = ", ".join(sorted(overlap))
+            raise ConfigurationError(
+                f"models[{index}] parameters cannot appear in both params and grid: {names}"
+            )
+        grid = {}
+        candidate_count = 1
+        for parameter in sorted(grid_object):
+            values = grid_object[parameter]
+            if not isinstance(values, list) or not values:
+                raise ConfigurationError(
+                    f"models[{index}].grid.{parameter} must be a non-empty array"
+                )
+            try:
+                encoded_values = [
+                    json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                    for value in values
+                ]
+            except (TypeError, ValueError) as exc:
+                raise ConfigurationError(
+                    f"models[{index}].grid.{parameter} must contain strict JSON values"
+                ) from exc
+            if len(set(encoded_values)) != len(encoded_values):
+                raise ConfigurationError(
+                    f"models[{index}].grid.{parameter} must not contain duplicate values"
+                )
+            candidate_count *= len(values)
+            if candidate_count > MAX_GRID_CANDIDATES:
+                raise ConfigurationError(
+                    f"models[{index}].grid expands beyond {MAX_GRID_CANDIDATES} candidates"
+                )
+            grid[parameter] = tuple(values)
+        keys = tuple(grid)
+        combinations: list[dict[str, Any]] = [dict(params)]
+        for parameter in keys:
+            combinations = [
+                {**combination, parameter: value}
+                for combination in combinations
+                for value in grid[parameter]
+            ]
+        for candidate_index, candidate in enumerate(combinations):
+            _validated_model_parameters(
+                name,
+                candidate,
+                seed=seed,
+                location=f"models[{index}].grid candidate {candidate_index}",
+            )
+        floating_parameters = {
+            ("item_knn", "shrinkage"),
+            ("implicit_mf", "learning_rate"),
+            ("implicit_mf", "regularization"),
+        }
+        for parameter, values in grid.items():
+            semantic_values = [
+                float(value) if (name, parameter) in floating_parameters else value
+                for value in values
+            ]
+            if len(set(semantic_values)) != len(semantic_values):
+                raise ConfigurationError(
+                    f"models[{index}].grid.{parameter} must not contain "
+                    "semantically duplicate values"
+                )
+    if tuning_enabled and name == "implicit_mf" and ("seed" in params or "seed" in grid):
+        raise ConfigurationError(
+            f"models[{index}] cannot tune or fix implicit_mf.seed; "
+            "use tuning.implicit_mf_seeds for validation repeats and top-level seed for final fit"
+        )
+    return BenchmarkModelSpec(label=label, name=name, params=dict(params), grid=grid)
+
+
+def _parse_tuning(
+    raw: object,
+    *,
+    seed: int,
+    split_method: str,
+    split_ratio: float,
+) -> BenchmarkTuningConfig:
+    tuning = _object(raw, "tuning")
+    _unknown(
+        tuning,
+        {"selection_metric", "direction", "validation_split", "implicit_mf_seeds"},
+        "tuning",
+    )
+    selection_metric = tuning.get("selection_metric", "ndcg")
+    if not isinstance(selection_metric, str) or selection_metric not in BENCHMARK_METRIC_NAMES:
+        raise ConfigurationError(
+            "tuning.selection_metric must be precision, recall, ndcg, mrr, coverage, or novelty"
+        )
+    direction = tuning.get("direction", "maximize")
+    if not isinstance(direction, str) or direction not in {"maximize", "minimize"}:
+        raise ConfigurationError("tuning.direction must be maximize or minimize")
+    validation = _object(tuning.get("validation_split", {}), "tuning.validation_split")
+    _unknown(validation, {"method", "validation_ratio"}, "tuning.validation_split")
+    method = validation.get("method", split_method)
+    if not isinstance(method, str) or method not in {"random", "temporal", "leave_one_out"}:
+        raise ConfigurationError(
+            "tuning.validation_split.method must be random, temporal, or leave_one_out"
+        )
+    validation_ratio = _finite_number(
+        validation.get("validation_ratio", split_ratio),
+        "tuning.validation_split.validation_ratio",
+    )
+    if not 0.0 < validation_ratio < 1.0:
+        raise ConfigurationError("tuning.validation_split.validation_ratio must be between 0 and 1")
+    raw_seeds = tuning.get("implicit_mf_seeds", [seed])
+    if not isinstance(raw_seeds, list) or not raw_seeds:
+        raise ConfigurationError("tuning.implicit_mf_seeds must be a non-empty array")
+    if len(raw_seeds) > MAX_IMPLICIT_MF_SEEDS:
+        raise ConfigurationError(
+            f"tuning.implicit_mf_seeds must contain at most {MAX_IMPLICIT_MF_SEEDS} seeds"
+        )
+    seeds: list[int] = []
+    for index, value in enumerate(raw_seeds):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigurationError(f"tuning.implicit_mf_seeds[{index}] must be an integer")
+        seeds.append(value)
+    if len(set(seeds)) != len(seeds):
+        raise ConfigurationError("tuning.implicit_mf_seeds must not contain duplicates")
+    return BenchmarkTuningConfig(
+        selection_metric=selection_metric,
+        direction=direction,
+        validation_split=BenchmarkValidationSplitConfig(
+            method=method,
+            validation_ratio=validation_ratio,
+        ),
+        implicit_mf_seeds=tuple(seeds),
+    )
 
 
 def benchmark_config_from_dict(
@@ -177,7 +375,7 @@ def benchmark_config_from_dict(
     root = _object(payload, "benchmark configuration")
     _unknown(
         root,
-        {"schema_version", "seed", "data", "split", "evaluation", "models"},
+        {"schema_version", "seed", "data", "split", "evaluation", "models", "tuning"},
         "benchmark configuration",
     )
     version = root.get("schema_version")
@@ -206,7 +404,9 @@ def benchmark_config_from_dict(
             raise ConfigurationError("data.minimum_rating is only valid for MovieLens formats")
         minimum_rating = None
     else:
-        minimum_rating = 4.0 if raw_minimum is None else _finite_number(raw_minimum, "data.minimum_rating")
+        minimum_rating = (
+            4.0 if raw_minimum is None else _finite_number(raw_minimum, "data.minimum_rating")
+        )
         if not 1.0 <= minimum_rating <= 5.0:
             raise ConfigurationError("data.minimum_rating must be between 1 and 5")
     path = Path(raw_path)
@@ -240,18 +440,35 @@ def benchmark_config_from_dict(
     if not 0.0 < confidence < 1.0:
         raise ConfigurationError("evaluation.confidence must be between 0 and 1")
 
+    raw_tuning = root.get("tuning")
+    tuning = (
+        None
+        if raw_tuning is None
+        else _parse_tuning(
+            raw_tuning,
+            seed=seed,
+            split_method=split_method,
+            split_ratio=test_ratio,
+        )
+    )
+
     raw_models = root.get("models")
     if raw_models is None:
         models = default_benchmark_models()
     else:
         if not isinstance(raw_models, list) or not raw_models:
             raise ConfigurationError("models must be a non-empty array")
-        models = tuple(_parse_model(entry, index, seed) for index, entry in enumerate(raw_models))
+        models = tuple(
+            _parse_model(entry, index, seed, tuning_enabled=tuning is not None)
+            for index, entry in enumerate(raw_models)
+        )
     labels = [model.label for model in models]
     if len(set(labels)) != len(labels):
         raise ConfigurationError("model labels must be unique")
     if len(models) < 2:
         raise ConfigurationError("a benchmark requires at least two models")
+    if tuning is not None and not any(model.grid for model in models):
+        raise ConfigurationError("tuning requires at least one model grid")
 
     return BenchmarkConfig(
         seed=seed,
@@ -264,6 +481,7 @@ def benchmark_config_from_dict(
             confidence=confidence,
         ),
         models=models,
+        tuning=tuning,
     )
 
 
@@ -274,7 +492,9 @@ def load_benchmark_config(path: str | Path) -> BenchmarkConfig:
     try:
         payload = strict_json_loads(source.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise ConfigurationError(f"could not read benchmark configuration from {source}: {exc}") from exc
+        raise ConfigurationError(
+            f"could not read benchmark configuration from {source}: {exc}"
+        ) from exc
     except ValueError as exc:
         raise ConfigurationError(f"invalid benchmark JSON in {source}: {exc}") from exc
     if not isinstance(payload, Mapping):
@@ -291,10 +511,14 @@ def save_benchmark_config(config: BenchmarkConfig, path: str | Path) -> None:
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(
-            json.dumps(config.to_dict(), indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
+            json.dumps(
+                config.to_dict(), indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+            )
             + "\n",
             encoding="utf-8",
             newline="\n",
         )
     except (OSError, TypeError, ValueError) as exc:
-        raise ConfigurationError(f"could not write benchmark configuration to {destination}: {exc}") from exc
+        raise ConfigurationError(
+            f"could not write benchmark configuration to {destination}: {exc}"
+        ) from exc

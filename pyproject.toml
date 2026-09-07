@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orchidrec"
-version = "0.2.0"
+version = "0.3.0"
 description = "A dependency-free toolkit for reproducible recommendation experiments"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,8 @@ dev = [
   "coverage>=7.6",
   "mypy>=1.15",
   "ruff>=0.11",
+  "setuptools>=77",
+  "wheel",
 ]
 
 [project.scripts]

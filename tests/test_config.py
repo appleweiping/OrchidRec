@@ -126,8 +126,7 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "duplicate.json"
             path.write_text(
-                '{"data":{"path":"a.json"},"data":{"path":"b.json"},'
-                '"model":{"name":"popularity"}}',
+                '{"data":{"path":"a.json"},"data":{"path":"b.json"},"model":{"name":"popularity"}}',
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ConfigurationError, "duplicate JSON object key"):

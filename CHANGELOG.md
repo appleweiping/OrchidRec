@@ -4,6 +4,26 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.3.0] - 2026-09-07
+
+- Added a tag-gated release pipeline with locked builds, clean wheel and sdist
+  installation checks, CycloneDX SBOM, SHA-256 manifest, and GitHub provenance.
+- Added optional, deterministic validation-only grid search for every built-in
+  model. The outer test partition remains sealed while all candidates are fit
+  on an inner training partition and selected on validation; selected
+  parameters are then refit on training plus validation and evaluated on test
+  once per model.
+- Added explicit multi-seed validation repeats for ImplicitMF. Candidate scores
+  are arithmetic means across the configured validation seeds, while the one
+  final refit uses the benchmark's top-level seed. Deterministic models are not
+  needlessly repeated.
+- Tuned benchmark reports now retain the complete search space, every trial,
+  selection metric and direction, timings, effective and final parameters, and
+  content hashes for development, training, validation, test, configuration,
+  and source/normalized data. Untuned configurations and reports retain their
+  prior shape and behavior.
 - Added exposure-corrected offline evaluation. `orchidrec.propensity` supplies an
   explicit exposure model -- a popularity model following Yang et al. (RecSys 2018),
   or `uniform_exposure` to state that none is assumed -- and `orchidrec.unbiased`

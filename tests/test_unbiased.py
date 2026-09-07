@@ -398,9 +398,7 @@ class ConfigurationTests(unittest.TestCase):
             self.assertIsNotNone(config.evaluation.exposure)
             assert config.evaluation.exposure is not None
             self.assertAlmostEqual(config.evaluation.exposure.exponent, DEFAULT_EXPONENT)
-            self.assertAlmostEqual(
-                config.evaluation.exposure.minimum, DEFAULT_MINIMUM_PROPENSITY
-            )
+            self.assertAlmostEqual(config.evaluation.exposure.minimum, DEFAULT_MINIMUM_PROPENSITY)
 
     def test_exposure_parameters_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

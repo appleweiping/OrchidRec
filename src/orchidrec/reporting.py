@@ -63,7 +63,7 @@ def benchmark_csv(result: BenchmarkResult) -> str:
     if not isinstance(result, BenchmarkResult):
         raise SerializationError("result must be a BenchmarkResult")
     output = io.StringIO(newline="")
-    fields = (
+    base_fields = (
         "row_type",
         "left_or_model",
         "right_model",
@@ -78,6 +78,15 @@ def benchmark_csv(result: BenchmarkResult) -> str:
         "fit_seconds",
         "recommend_seconds",
     )
+    tuning_fields = (
+        "candidate_index",
+        "trial_seed",
+        "parameters_json",
+        "search_space_json",
+        "selected",
+        "direction",
+    )
+    fields = base_fields + tuning_fields if result.tuning is not None else base_fields
     writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     for model in result.models:
@@ -116,6 +125,53 @@ def benchmark_csv(result: BenchmarkResult) -> str:
                     "two_sided_p_value": statistic.two_sided_p_value,
                 }
             )
+    if result.tuning is not None:
+        for tuning_model in result.tuning.models:
+            search_space = json.dumps(
+                {name: list(values) for name, values in tuning_model.search_space.items()},
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            for candidate in tuning_model.candidates:
+                writer.writerow(
+                    {
+                        "row_type": "tuning_candidate",
+                        "left_or_model": _spreadsheet_text(tuning_model.label),
+                        "metric": result.tuning.selection_metric,
+                        "estimate": candidate.mean_selection_value,
+                        "candidate_index": candidate.candidate_index,
+                        "parameters_json": json.dumps(
+                            candidate.parameters,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        ),
+                        "search_space_json": search_space,
+                        "selected": candidate.selected,
+                        "direction": result.tuning.direction,
+                    }
+                )
+            for trial in tuning_model.trials:
+                writer.writerow(
+                    {
+                        "row_type": "tuning_trial",
+                        "left_or_model": _spreadsheet_text(tuning_model.label),
+                        "metric": result.tuning.selection_metric,
+                        "estimate": trial.selection_value,
+                        "fit_seconds": trial.timing.fit_seconds,
+                        "recommend_seconds": trial.timing.recommend_seconds,
+                        "candidate_index": trial.candidate_index,
+                        "trial_seed": trial.seed,
+                        "parameters_json": json.dumps(
+                            trial.parameters,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        ),
+                        "direction": result.tuning.direction,
+                    }
+                )
     return output.getvalue()
 
 
@@ -172,6 +228,80 @@ def benchmark_html(result: BenchmarkResult) -> str:
     headers = "".join(f"<th>{html.escape(name.title())}</th>" for name in METRIC_NAMES)
     dataset = result.dataset
     confidence_percent = result.confidence * 100.0
+    tuning_html = ""
+    if result.tuning is not None:
+        tuning_rows: list[str] = []
+        tuning_trial_rows: list[str] = []
+        for tuning_model in result.tuning.models:
+            for candidate in tuning_model.candidates:
+                seeds = ", ".join(
+                    "deterministic"
+                    if tuning_model.trials[index].seed is None
+                    else str(tuning_model.trials[index].seed)
+                    for index in candidate.trial_indices
+                )
+                parameters = json.dumps(
+                    candidate.parameters,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                tuning_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(tuning_model.label)}</td>"
+                    f"<td>{candidate.candidate_index}</td>"
+                    f"<td><code>{html.escape(parameters)}</code></td>"
+                    f"<td>{html.escape(seeds)}</td>"
+                    f"<td>{_number(candidate.mean_selection_value)}</td>"
+                    f"<td>{'yes' if candidate.selected else 'no'}</td>"
+                    "</tr>"
+                )
+            for trial_index, trial in enumerate(tuning_model.trials):
+                trial_parameters = json.dumps(
+                    trial.parameters,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                tuning_trial_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(tuning_model.label)}</td>"
+                    f"<td>{trial_index}</td>"
+                    f"<td>{trial.candidate_index}</td>"
+                    f"<td>{'deterministic' if trial.seed is None else trial.seed}</td>"
+                    f"<td><code>{html.escape(trial_parameters)}</code></td>"
+                    f"<td>{_number(trial.selection_value)}</td>"
+                    f"<td>{_number(trial.timing.fit_seconds)} / "
+                    f"{_number(trial.timing.recommend_seconds)}</td>"
+                    "</tr>"
+                )
+        tuning = result.tuning
+        tuning_html = f"""
+<h2>Validation-only model selection</h2>
+<p>Outer test data was evaluated only after all searches completed. Candidates use a
+<strong>{html.escape(tuning.validation_method)}</strong> validation split and select
+<strong>{html.escape(tuning.selection_metric)}</strong> by
+<strong>{html.escape(tuning.direction)}</strong>. Equal scores keep the first canonical candidate.</p>
+<div class="scroll"><table>
+<thead><tr><th>Model</th><th>Candidate</th><th>Effective parameters</th><th>Validation seeds</th><th>Mean score</th><th>Selected</th></tr></thead>
+<tbody>{"".join(tuning_rows)}</tbody>
+</table></div>
+<h3>All validation trials</h3>
+<div class="scroll"><table>
+<thead><tr><th>Model</th><th>Trial</th><th>Candidate</th><th>Seed</th><th>Effective parameters</th><th>Selection value</th><th>Fit / recommend seconds</th></tr></thead>
+<tbody>{"".join(tuning_trial_rows)}</tbody>
+</table></div>
+<p><small>Development / training / validation interactions: {tuning.development_interactions:,} /
+{tuning.training_interactions:,} / {tuning.validation_interactions:,}. ImplicitMF validation seeds:
+{html.escape(", ".join(str(seed) for seed in tuning.implicit_mf_seeds))}; final fit seed:
+{tuning.final_seed}.</small></p>
+<p><span class="label">Training SHA-256</span><code>{tuning.training_fingerprint}</code></p>
+<p><span class="label">Validation SHA-256</span><code>{tuning.validation_fingerprint}</code></p>
+<p><span class="label">Test SHA-256</span><code>{tuning.test_fingerprint}</code></p>
+<p><span class="label">Three-way split SHA-256</span><code>{tuning.three_way_split_fingerprint}</code></p>
+"""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -205,14 +335,15 @@ code {{ overflow-wrap: anywhere; }}
 <h2>Model results</h2>
 <div class="scroll"><table>
 <thead><tr><th>Model</th>{headers}<th>Fit / recommend seconds</th></tr></thead>
-<tbody>{''.join(model_rows)}</tbody>
+<tbody>{"".join(model_rows)}</tbody>
 </table></div>
 <p><small>Intervals resample evaluated users with replacement. Timing is observational and is not a deterministic fingerprint.</small></p>
 <h2>Paired comparisons</h2>
 <div class="scroll"><table>
 <thead><tr><th>Right - left</th><th>Metric</th><th>Difference</th><th>Interval</th><th>P(right better)</th><th>Two-sided p</th></tr></thead>
-<tbody>{''.join(comparison_rows)}</tbody>
+<tbody>{"".join(comparison_rows)}</tbody>
 </table></div>
+{tuning_html}
 <h2>Reproducibility</h2>
 <p><span class="label">Normalized interactions SHA-256</span><code>{dataset.interactions_sha256}</code></p>
 <p><span class="label">Source bytes SHA-256</span><code>{dataset.source_sha256}</code></p>
@@ -223,9 +354,7 @@ code {{ overflow-wrap: anywhere; }}
 """
 
 
-def save_benchmark_reports(
-    result: BenchmarkResult, output_dir: str | Path
-) -> BenchmarkReportPaths:
+def save_benchmark_reports(result: BenchmarkResult, output_dir: str | Path) -> BenchmarkReportPaths:
     """Atomically write JSON, CSV, and standalone HTML artifacts."""
 
     if not isinstance(result, BenchmarkResult):

@@ -1,12 +1,21 @@
 """OrchidRec: reproducible recommendation experiments and benchmarks."""
 
-from orchidrec.benchmark import BenchmarkResult, run_benchmark
+from orchidrec.benchmark import (
+    BenchmarkResult,
+    BenchmarkTuningResult,
+    ModelTuningResult,
+    TuningCandidateResult,
+    TuningTrial,
+    run_benchmark,
+)
 from orchidrec.benchmark_config import (
     BenchmarkConfig,
     BenchmarkDataConfig,
     BenchmarkEvaluationConfig,
     BenchmarkModelSpec,
     BenchmarkSplitConfig,
+    BenchmarkTuningConfig,
+    BenchmarkValidationSplitConfig,
     benchmark_config_from_dict,
     load_benchmark_config,
     save_benchmark_config,
@@ -58,6 +67,9 @@ __all__ = [
     "BenchmarkReportPaths",
     "BenchmarkResult",
     "BenchmarkSplitConfig",
+    "BenchmarkTuningConfig",
+    "BenchmarkTuningResult",
+    "BenchmarkValidationSplitConfig",
     "BootstrapInterval",
     "DatasetFormat",
     "DatasetSummary",
@@ -71,11 +83,14 @@ __all__ = [
     "ItemKNN",
     "LoadedDataset",
     "MetricReport",
+    "ModelTuningResult",
     "PairedBootstrapResult",
     "Popularity",
     "Recommendation",
     "SplitResult",
     "StableIdMap",
+    "TuningCandidateResult",
+    "TuningTrial",
     "UnbiasedMetricReport",
     "benchmark_config_from_dict",
     "bootstrap_mean",
@@ -102,4 +117,4 @@ __all__ = [
     "uniform_exposure",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

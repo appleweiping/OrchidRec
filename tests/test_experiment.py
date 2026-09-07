@@ -66,7 +66,9 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(result.model_parameters, {"weighted": True})
 
     def test_explicit_model_seed_takes_precedence(self) -> None:
-        model = build_model("implicit_mf", {"factors": 2, "epochs": 1, "seed": 7}, experiment_seed=99)
+        model = build_model(
+            "implicit_mf", {"factors": 2, "epochs": 1, "seed": 7}, experiment_seed=99
+        )
         self.assertEqual(model.seed, 7)
 
     def test_bad_model_parameters_are_configuration_errors(self) -> None:

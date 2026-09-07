@@ -216,9 +216,7 @@ def paired_comparison_from_draws(
     right_mean = safe_float(right_estimate)
     if not math.isfinite(left_mean) or not math.isfinite(right_mean):
         raise ValidationError("estimates must be finite numbers")
-    differences = tuple(
-        right - left for left, right in zip(left_values, right_values, strict=True)
-    )
+    differences = tuple(right - left for left, right in zip(left_values, right_values, strict=True))
     positive = sum(value > 0.0 for value in differences)
     zero = sum(value == 0.0 for value in differences)
     samples = len(differences)

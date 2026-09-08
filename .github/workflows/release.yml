@@ -60,6 +60,8 @@ jobs:
           .release-wheel-check/bin/python -m pip install --disable-pip-version-check --no-deps dist/*.whl
           .release-wheel-check/bin/python -c "import orchidrec; assert orchidrec.__version__ == '${GITHUB_REF_NAME#v}'"
           .release-wheel-check/bin/orchidrec --version
+          .release-wheel-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/release-wheel-feature-pipeline.json
+          .release-wheel-check/bin/orchidrec transform-features --pipeline artifacts/release-wheel-feature-pipeline.json --input examples/features-validation.json --output artifacts/release-wheel-features-encoded.json
       - name: Verify the source distribution in a clean environment
         shell: bash
         run: |
@@ -67,6 +69,8 @@ jobs:
           .release-sdist-check/bin/python -m pip install --disable-pip-version-check --no-deps dist/*.tar.gz
           .release-sdist-check/bin/python -c "import orchidrec; assert orchidrec.__version__ == '${GITHUB_REF_NAME#v}'"
           .release-sdist-check/bin/orchidrec --version
+          .release-sdist-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/release-sdist-feature-pipeline.json
+          .release-sdist-check/bin/orchidrec transform-features --pipeline artifacts/release-sdist-feature-pipeline.json --input examples/features-validation.json --output artifacts/release-sdist-features-encoded.json
       - name: Generate runtime dependency SBOM
         shell: bash
         run: >-

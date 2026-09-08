@@ -13,7 +13,8 @@ It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
 deterministic ID mapping, three train/test split strategies, six
 recommenders, six ranking metrics, user bootstrap intervals, paired model
-comparisons, portable JSON model state, and JSON/CSV/standalone-HTML reports.
+comparisons, leakage-safe typed feature preprocessing, portable JSON state,
+and JSON/CSV/standalone-HTML reports.
 
 ## Quick start
 
@@ -41,6 +42,19 @@ orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchm
 
 Open `artifacts/benchmark/benchmark.html` directly in a browser; it has no
 external scripts, fonts, or network requests.
+
+Fit a typed feature pipeline on training rows, then reuse its frozen
+vocabularies and numeric statistics on validation rows:
+
+```bash
+orchidrec fit-features --input examples/features-train.json --output artifacts/feature-pipeline.json
+orchidrec transform-features --pipeline artifacts/feature-pipeline.json --input examples/features-validation.json --output artifacts/features-validation-encoded.json
+```
+
+The validation example contains unseen tokens, which map to the reserved
+unknown index without changing fitted state. See the
+[typed feature pipeline guide](docs/features.md) for the schema, provenance,
+resource-limit, and persistence contracts.
 
 ## Real MovieLens benchmark
 
@@ -137,6 +151,11 @@ flowchart LR
     J --> K
     K --> M[JSON / tidy CSV / standalone HTML]
     P --> L[Versioned JSON model]
+    Q[Typed user / item / interaction rows] --> R[Training-only feature fit]
+    R --> S[Frozen vocabularies and numeric statistics]
+    T[Validation / test feature rows] --> U[Schema-checked transform]
+    S --> U
+    U --> V[Fixed-width encoded rows with pipeline SHA-256]
 ```
 
 The modules have deliberately narrow responsibilities:
@@ -145,6 +164,8 @@ The modules have deliberately narrow responsibilities:
   contiguous indices.
 - `datasets.py` strictly parses local datasets and records content-addressed
   provenance without downloading data.
+- `features.py` defines typed schemas, fits train-only vocabularies and numeric
+  statistics, produces fixed-width encoded rows, and persists checksummed state.
 - `split.py` partitions events without dropping or duplicating records.
 - `models/` owns fitting, scoring, Top-K ranking, cold-start fallback, and
   versioned serialization.
@@ -521,6 +542,8 @@ orchidrec inspect MODEL
 orchidrec recommend MODEL USER_ID [--k K] [--include-seen]
 orchidrec dataset-summary DATA --format FORMAT [--minimum-rating RATING]
 orchidrec benchmark CONFIG [--output-dir DIRECTORY]
+orchidrec fit-features --input DATASET --output PIPELINE [RESOURCE LIMITS]
+orchidrec transform-features --pipeline PIPELINE --input DATASET --output ENCODED
 ```
 
 `USER_ID` accepts a JSON scalar. `42` is an integer ID, `"42"` is a string ID,
@@ -572,6 +595,25 @@ paths = save_benchmark_reports(result, "artifacts/ml-100k")
 print(result.dataset.interactions_sha256, paths.html_path)
 ```
 
+For leakage-safe feature preprocessing:
+
+```python
+from orchidrec import FittedFeaturePipeline, load_feature_dataset
+
+training = load_feature_dataset("examples/features-train.json")
+pipeline = FittedFeaturePipeline.fit(training)
+validation = load_feature_dataset(
+    "examples/features-validation.json",
+    limits=pipeline.limits,
+)
+encoded = pipeline.transform(validation)
+assert encoded.pipeline_sha256 == pipeline.state_sha256
+```
+
+The pipeline learns only from `training`; unseen validation/test tokens use a
+reserved unknown index. Full schema and persistence details are in
+[docs/features.md](docs/features.md).
+
 ## Reproducibility contract
 
 For the same validated input order, configuration, and supported Python
@@ -598,7 +640,9 @@ fields. Neither runner changes Python's process-global random state.
   ImplicitMF uses simple SGD while ConfidenceALS solves small systems in pure
   Python rather than optimized native kernels. Full MovieLens 1M runs can
   therefore be slow.
-- There is no feature store, distributed execution, or online serving layer.
+- Typed feature preprocessing is in memory and produces standalone encoded
+  rows; there is no distributed feature store, automatic interaction join, or
+  online serving layer.
 - Hyperparameter search is deliberately limited to explicit finite grids; it
   does not implement adaptive, Bayesian, distributed, or test-informed search.
 - Offline holdout metrics assume unobserved items are candidates. Exposure and
@@ -627,6 +671,8 @@ coverage run -m unittest discover -s tests && coverage report
 python -m compileall -q src tests examples
 orchidrec demo --output-dir artifacts/smoke
 orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchmark-smoke
+orchidrec fit-features --input examples/features-train.json --output artifacts/feature-pipeline.json
+orchidrec transform-features --pipeline artifacts/feature-pipeline.json --input examples/features-validation.json --output artifacts/features-validation-encoded.json
 python -m build
 ```
 
@@ -640,6 +686,10 @@ checks and explicit chronology-failure tests. ConfidenceALS is checked against
 a hand-solved linear system, an independently assembled normal equation, and an
 independently recomputed dense objective, in addition to persistence,
 determinism, resource, and cold-start tests.
+The feature pipeline adds hand-computed vocabulary and normalization oracles,
+unseen-token and sequence semantics, extreme finite values, order invariance,
+strict checksum and schema tamper cases, bounded streaming persistence,
+interruption cleanup, path-alias rejection, and CLI round trips.
 See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes and
 [the release process](docs/releasing.md) for clean-install, SBOM, checksum,
 and build-provenance guarantees.

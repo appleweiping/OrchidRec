@@ -6,6 +6,22 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.6.0] - 2026-09-08
+
+- Added immutable, typed user, item, and interaction feature schemas for token,
+  numeric, token-sequence, and numeric-sequence data with strict shape, type,
+  identity, and resource validation.
+- Added a deterministic training-only preprocessing pipeline with type-aware
+  token vocabularies, reserved padding/unknown indices, stable numeric
+  normalization, configurable head/tail sequence truncation, fixed-width
+  padding, and explicit real sequence lengths.
+- Added canonical training provenance, checksummed/versioned fitted state,
+  pipeline-bound encoded datasets, bounded row-wise atomic JSON persistence,
+  and strict tamper, duplicate-field, byte-limit, and interruption handling.
+- Added `fit-features` and `transform-features` workflows, checked-in train and
+  validation examples, a complete feature contract guide, hand-computed
+  correctness oracles, and clean-install feature smoke tests.
+
 ## [0.5.0] - 2026-09-07
 
 - Added an independent confidence-weighted implicit-feedback ALS model with

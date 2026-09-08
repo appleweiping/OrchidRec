@@ -1,0 +1,58 @@
+{
+  "format": "orchidrec.feature-dataset",
+  "rows": [
+    {
+      "key": "request-2",
+      "source": "interaction",
+      "values": {
+        "recent_dwell_seconds": [9.0, 14.0, 22.0]
+      }
+    },
+    {
+      "key": "article-b",
+      "source": "item",
+      "values": {
+        "topics": ["energy", "storage", "policy", "research"]
+      }
+    },
+    {
+      "key": "carol",
+      "source": "user",
+      "values": {
+        "country": "DE",
+        "tenure_days": 75.0
+      }
+    }
+  ],
+  "schema": [
+    {
+      "keep": null,
+      "kind": "token",
+      "name": "country",
+      "sequence_length": null,
+      "source": "user"
+    },
+    {
+      "keep": null,
+      "kind": "float",
+      "name": "tenure_days",
+      "sequence_length": null,
+      "source": "user"
+    },
+    {
+      "keep": "head",
+      "kind": "token-sequence",
+      "name": "topics",
+      "sequence_length": 3,
+      "source": "item"
+    },
+    {
+      "keep": "tail",
+      "kind": "float-sequence",
+      "name": "recent_dwell_seconds",
+      "sequence_length": 2,
+      "source": "interaction"
+    }
+  ],
+  "schema_version": 1
+}

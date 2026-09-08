@@ -33,6 +33,17 @@ jobs:
         run: uv run --locked python -m unittest discover -s tests -v
       - name: Run installed CLI smoke test
         run: uv run --locked orchidrec demo --output-dir artifacts/ci-demo
+      - name: Run typed feature pipeline smoke test
+        run: >-
+          uv run --locked orchidrec fit-features
+          --input examples/features-train.json
+          --output artifacts/ci-feature-pipeline.json
+      - name: Transform validation features with frozen training state
+        run: >-
+          uv run --locked orchidrec transform-features
+          --pipeline artifacts/ci-feature-pipeline.json
+          --input examples/features-validation.json
+          --output artifacts/ci-features-validation-encoded.json
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run shared-split benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/ci-benchmark
@@ -61,3 +72,5 @@ jobs:
           .ci-wheel-check/bin/python -m pip install --disable-pip-version-check --no-deps dist/*.whl
           .ci-wheel-check/bin/python -c "import orchidrec; print(orchidrec.__version__)"
           .ci-wheel-check/bin/orchidrec --help
+          .ci-wheel-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/ci-wheel-feature-pipeline.json
+          .ci-wheel-check/bin/orchidrec transform-features --pipeline artifacts/ci-wheel-feature-pipeline.json --input examples/features-validation.json --output artifacts/ci-wheel-features-encoded.json

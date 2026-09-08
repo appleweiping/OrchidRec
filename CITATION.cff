@@ -6,11 +6,12 @@ authors:
   - family-names: "Yan"
     given-names: "Weiping"
     alias: "appleweiping"
-version: 0.5.0
-date-released: 2026-09-07
+version: 0.6.0
+date-released: 2026-09-08
 license: MIT
 repository-code: "https://github.com/appleweiping/OrchidRec"
 url: "https://github.com/appleweiping/OrchidRec"
 abstract: >-
   A dependency-free Python toolkit for leakage-aware recommendation experiments,
-  collaborative filtering, ranking evaluation, and reproducible reports.
+  collaborative filtering, typed feature preprocessing, ranking evaluation,
+  and reproducible reports.

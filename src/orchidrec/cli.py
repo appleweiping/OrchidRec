@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
 
 from orchidrec import __version__
@@ -17,6 +19,13 @@ from orchidrec.datasets import load_dataset
 from orchidrec.demo import run_demo
 from orchidrec.errors import OrchidRecError, ValidationError
 from orchidrec.experiment import run_experiment
+from orchidrec.features import (
+    DEFAULT_FEATURE_LIMITS,
+    FeatureLimits,
+    FittedFeaturePipeline,
+    load_feature_dataset,
+    save_encoded_features,
+)
 from orchidrec.models import load_model
 from orchidrec.reporting import save_benchmark_reports
 
@@ -60,7 +69,74 @@ def _parser() -> argparse.ArgumentParser:
         choices=("orchidrec-json", "movielens-100k", "movielens-1m"),
     )
     dataset_summary.add_argument("--minimum-rating", type=float)
+
+    fit_features = subparsers.add_parser(
+        "fit-features",
+        help="fit a typed preprocessing pipeline from training-only feature rows",
+    )
+    fit_features.add_argument("--input", type=Path, required=True)
+    fit_features.add_argument("--output", type=Path, required=True)
+    fit_features.add_argument("--max-rows", type=int, default=DEFAULT_FEATURE_LIMITS.max_rows)
+    fit_features.add_argument(
+        "--max-total-values",
+        type=int,
+        default=DEFAULT_FEATURE_LIMITS.max_total_values,
+    )
+    fit_features.add_argument(
+        "--max-vocab-values",
+        type=int,
+        default=DEFAULT_FEATURE_LIMITS.max_vocab_values,
+    )
+    fit_features.add_argument(
+        "--max-vocab-token-bytes",
+        type=int,
+        default=DEFAULT_FEATURE_LIMITS.max_vocab_token_bytes,
+    )
+    fit_features.add_argument(
+        "--max-state-bytes",
+        type=int,
+        default=DEFAULT_FEATURE_LIMITS.max_state_bytes,
+    )
+
+    transform_features = subparsers.add_parser(
+        "transform-features",
+        help="encode feature rows with an already-fitted immutable pipeline",
+    )
+    transform_features.add_argument("--pipeline", type=Path, required=True)
+    transform_features.add_argument("--input", type=Path, required=True)
+    transform_features.add_argument("--output", type=Path, required=True)
+    transform_features.add_argument(
+        "--max-pipeline-bytes",
+        type=int,
+        default=DEFAULT_FEATURE_LIMITS.max_state_bytes,
+    )
     return parser
+
+
+def _require_distinct_paths(paths: dict[str, Path]) -> None:
+    names = tuple(paths)
+    resolved = {name: path.resolve() for name, path in paths.items()}
+    for index, left in enumerate(names):
+        for right in names[index + 1 :]:
+            same_file = False
+            with suppress(OSError):
+                same_file = (
+                    paths[left].exists()
+                    and paths[right].exists()
+                    and os.path.samefile(paths[left], paths[right])
+                )
+            if resolved[left] == resolved[right] or same_file:
+                raise ValidationError(f"--{left} and --{right} must refer to different files")
+
+
+def _feature_limits(args: argparse.Namespace) -> FeatureLimits:
+    return FeatureLimits(
+        max_rows=args.max_rows,
+        max_total_values=args.max_total_values,
+        max_vocab_values=args.max_vocab_values,
+        max_vocab_token_bytes=args.max_vocab_token_bytes,
+        max_state_bytes=args.max_state_bytes,
+    )
 
 
 def _parse_cli_id(raw: str) -> EntityId:
@@ -155,6 +231,54 @@ def main(argv: Sequence[str] | None = None) -> int:
                 minimum_rating=args.minimum_rating,
             )
             print(json.dumps(loaded.summary.to_dict(), indent=2, sort_keys=True))
+            return 0
+        if args.command == "fit-features":
+            _require_distinct_paths({"input": args.input, "output": args.output})
+            limits = _feature_limits(args)
+            pipeline = FittedFeaturePipeline.fit(
+                load_feature_dataset(args.input, limits=limits),
+                limits=limits,
+            )
+            pipeline.save(args.output)
+            print(
+                json.dumps(
+                    {
+                        "features": len(pipeline.schema),
+                        "output": str(args.output),
+                        "state_sha256": pipeline.state_sha256,
+                        "training_rows": pipeline.training_rows,
+                        "training_sha256": pipeline.training_sha256,
+                        "training_values": pipeline.training_values,
+                        "vocabulary_values": sum(
+                            len(values) for values in pipeline.token_vocabularies.values()
+                        ),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.command == "transform-features":
+            _require_distinct_paths(
+                {"input": args.input, "output": args.output, "pipeline": args.pipeline}
+            )
+            pipeline = FittedFeaturePipeline.load(
+                args.pipeline,
+                max_state_bytes=args.max_pipeline_bytes,
+            )
+            encoded = pipeline.transform(load_feature_dataset(args.input, limits=pipeline.limits))
+            save_encoded_features(encoded, args.output, limits=pipeline.limits)
+            print(
+                json.dumps(
+                    {
+                        "output": str(args.output),
+                        "pipeline_sha256": encoded.pipeline_sha256,
+                        "rows": len(encoded),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
             return 0
         parser.error(f"unknown command: {args.command}")
     except OrchidRecError as exc:

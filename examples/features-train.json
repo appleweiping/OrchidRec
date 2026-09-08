@@ -1,0 +1,66 @@
+{
+  "format": "orchidrec.feature-dataset",
+  "rows": [
+    {
+      "key": "request-1",
+      "source": "interaction",
+      "values": {
+        "recent_dwell_seconds": [12.0, 35.0, 18.0]
+      }
+    },
+    {
+      "key": "article-a",
+      "source": "item",
+      "values": {
+        "topics": ["energy", "markets"]
+      }
+    },
+    {
+      "key": "alice",
+      "source": "user",
+      "values": {
+        "country": "US",
+        "tenure_days": 120.0
+      }
+    },
+    {
+      "key": "bob",
+      "source": "user",
+      "values": {
+        "country": "CA",
+        "tenure_days": 30.0
+      }
+    }
+  ],
+  "schema": [
+    {
+      "keep": null,
+      "kind": "token",
+      "name": "country",
+      "sequence_length": null,
+      "source": "user"
+    },
+    {
+      "keep": null,
+      "kind": "float",
+      "name": "tenure_days",
+      "sequence_length": null,
+      "source": "user"
+    },
+    {
+      "keep": "head",
+      "kind": "token-sequence",
+      "name": "topics",
+      "sequence_length": 3,
+      "source": "item"
+    },
+    {
+      "keep": "tail",
+      "kind": "float-sequence",
+      "name": "recent_dwell_seconds",
+      "sequence_length": 2,
+      "source": "interaction"
+    }
+  ],
+  "schema_version": 1
+}

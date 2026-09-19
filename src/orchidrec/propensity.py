@@ -94,7 +94,7 @@ class ExposureModel:
             raise ValidationError("exponent must be a real number between 0 and 1")
         if not 0.0 < self.minimum <= 1.0:
             raise ValidationError("minimum must be a real number in (0, 1]")
-        if isinstance(self.clipped_items, bool) or not isinstance(self.clipped_items, int):
+        if type(self.clipped_items) is not int:
             raise ValidationError("clipped_items must be an integer")
         if not 0 <= self.clipped_items <= len(self.propensities):
             raise ValidationError("clipped_items must not exceed the number of items")

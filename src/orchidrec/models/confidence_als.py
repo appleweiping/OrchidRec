@@ -30,7 +30,7 @@ _OBJECTIVE_RELATIVE_TOLERANCE = 1e-7
 
 
 def _bounded_positive_int(value: object, name: str, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+    if type(value) is not int or not 1 <= value <= maximum:
         raise ValidationError(f"{name} must be an integer between 1 and {maximum}")
     return value
 
@@ -192,7 +192,7 @@ class ConfidenceALS(BaseRecommender):
             minimum=_MIN_REGULARIZATION,
             maximum=MAX_REGULARIZATION,
         )
-        if isinstance(seed, bool) or not isinstance(seed, int):
+        if type(seed) is not int:
             raise ValidationError("seed must be an integer")
         self.seed = seed
         self._user_factors: dict[EntityId, list[float]] = {}

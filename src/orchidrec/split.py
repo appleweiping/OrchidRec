@@ -53,7 +53,7 @@ def random_split(
 
     if not isinstance(dataset, InteractionDataset):
         raise SplitError("dataset must be an InteractionDataset")
-    if isinstance(seed, bool) or not isinstance(seed, int):
+    if type(seed) is not int:
         raise SplitError("seed must be an integer")
     n_test = _test_size(len(dataset), test_ratio)
     indices_by_pair: dict[tuple[EntityId, EntityId], list[int]] = defaultdict(list)

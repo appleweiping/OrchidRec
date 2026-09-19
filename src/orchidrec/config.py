@@ -39,7 +39,7 @@ def _unit_float(value: object, name: str, *, minimum: float, maximum: float) -> 
 
 
 def _positive_int(value: object, name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+    if type(value) is not int or value <= 0:
         raise ConfigurationError(f"{name} must be a positive integer")
     return value
 
@@ -133,7 +133,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     if "data" not in root or "model" not in root:
         raise ConfigurationError("configuration requires 'data' and 'model' objects")
     seed = root.get("seed", 42)
-    if isinstance(seed, bool) or not isinstance(seed, int):
+    if type(seed) is not int:
         raise ConfigurationError("seed must be an integer")
     directory = Path(base_dir).resolve()
 
@@ -169,14 +169,15 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     if not isinstance(model_name, str) or model_name not in {
         "popularity",
         "confidence_als",
+        "ease",
         "item_knn",
         "implicit_mf",
         "user_knn",
         "sequential_markov",
     }:
         raise ConfigurationError(
-            "model.name must be popularity, item_knn, implicit_mf, confidence_als, user_knn, "
-            "or sequential_markov"
+            "model.name must be popularity, item_knn, implicit_mf, confidence_als, ease, "
+            "user_knn, or sequential_markov"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -191,11 +192,13 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "seed",
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
+        "ease": {"regularization", "max_items", "max_interactions", "max_work_units"},
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }
     _unknown(params, allowed_params[model_name], "model.params")
     from orchidrec.models import (
+        EASE,
         ConfidenceALS,
         ImplicitMF,
         ItemKNN,
@@ -207,6 +210,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     model_types = {
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
+        "ease": EASE,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,

@@ -14,11 +14,25 @@ from orchidrec.config import (
 from orchidrec.errors import ConfigurationError
 
 
+class LyingInt(int):
+    def __le__(self, other: object) -> bool:
+        return True
+
+    def __ge__(self, other: object) -> bool:
+        return True
+
+
 def minimal_payload() -> dict:
     return {"data": {"path": "events.json"}, "model": {"name": "popularity"}}
 
 
 class ConfigTests(unittest.TestCase):
+    def test_integer_subclasses_are_rejected_at_configuration_boundaries(self) -> None:
+        for field, value in (("seed", LyingInt(42)), ("evaluation", {"k": LyingInt(10)})):
+            payload = minimal_payload() | {field: value}
+            with self.subTest(field=field), self.assertRaises(ConfigurationError):
+                config_from_dict(payload)
+
     def test_minimal_configuration_gets_documented_defaults(self) -> None:
         config = config_from_dict(minimal_payload(), base_dir=".")
         self.assertEqual(config.seed, 42)

@@ -44,6 +44,20 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(stdout)["model"]["type"], "item_knn")
 
+    def test_run_rejects_output_alias_to_configuration_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = run_demo(directory)
+            config_path = artifacts.config_path
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            payload["output"]["model_path"] = str(config_path)
+            config_path.write_text(json.dumps(payload), encoding="utf-8")
+            original = config_path.read_bytes()
+            code, stdout, stderr = self.invoke("run", str(config_path))
+            self.assertEqual(code, 2)
+            self.assertEqual(stdout, "")
+            self.assertIn("different files", stderr)
+            self.assertEqual(config_path.read_bytes(), original)
+
     def test_inspect_command_prints_model_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = run_demo(directory)
@@ -196,6 +210,35 @@ class CliTests(unittest.TestCase):
             self.assertEqual(len(payload["tuning"]["selected_models"]), 2)
             for path in payload["reports"].values():
                 self.assertTrue(Path(path).is_file())
+
+    def test_benchmark_rejects_output_alias_to_configuration_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "benchmark.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "data": {
+                            "path": str(FIXTURES / "movielens-100k"),
+                            "format": "movielens-100k",
+                            "minimum_rating": 4,
+                        },
+                        "models": [
+                            {"label": "pop", "name": "popularity"},
+                            {"label": "ease", "name": "ease"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original = config_path.read_bytes()
+            code, stdout, stderr = self.invoke(
+                "benchmark", str(config_path), "--output-dir", directory
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(stdout, "")
+            self.assertIn("different files", stderr)
+            self.assertEqual(config_path.read_bytes(), original)
 
     def test_dataset_summary_error_is_a_domain_exit(self) -> None:
         code, stdout, stderr = self.invoke(

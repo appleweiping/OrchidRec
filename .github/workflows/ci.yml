@@ -28,11 +28,13 @@ jobs:
       - name: Install package
         run: uv sync --locked
       - name: Compile source
-        run: uv run --locked python -m compileall -q src tests examples
+        run: uv run --locked python -m compileall -q src tests tools examples
       - name: Run tests
         run: uv run --locked python -m unittest discover -s tests -v
       - name: Run installed CLI smoke test
         run: uv run --locked orchidrec demo --output-dir artifacts/ci-demo
+      - name: Run EASE experiment smoke test
+        run: uv run --locked orchidrec run examples/ease_config.json
       - name: Run typed feature pipeline smoke test
         run: >-
           uv run --locked orchidrec fit-features
@@ -51,9 +53,9 @@ jobs:
         name: Install quality tools
         run: uv sync --locked --extra dev
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: uv run --locked ruff check src tests examples
+        run: uv run --locked ruff check src tests tools examples
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: uv run --locked ruff format --check src tests examples
+        run: uv run --locked ruff format --check src tests tools examples
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: uv run --locked mypy src
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
@@ -61,7 +63,11 @@ jobs:
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: uv audit --locked
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        run: uv run --locked coverage run -m unittest discover -s tests && uv run --locked coverage report
+        run: |
+          uv run --locked coverage run -m unittest discover -s tests
+          uv run --locked coverage report
+          uv run --locked coverage json -o /tmp/orchidrec-coverage.json
+          uv run --locked python tools/check_branch_coverage.py /tmp/orchidrec-coverage.json
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: uv run --locked python -m build --no-isolation
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
@@ -72,5 +78,6 @@ jobs:
           .ci-wheel-check/bin/python -m pip install --disable-pip-version-check --no-deps dist/*.whl
           .ci-wheel-check/bin/python -c "import orchidrec; print(orchidrec.__version__)"
           .ci-wheel-check/bin/orchidrec --help
+          .ci-wheel-check/bin/orchidrec run examples/ease_config.json
           .ci-wheel-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/ci-wheel-feature-pipeline.json
           .ci-wheel-check/bin/orchidrec transform-features --pipeline artifacts/ci-wheel-feature-pipeline.json --input examples/features-validation.json --output artifacts/ci-wheel-features-encoded.json

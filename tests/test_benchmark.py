@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,7 +19,8 @@ from orchidrec.benchmark_config import (
 )
 from orchidrec.data import Interaction, InteractionDataset
 from orchidrec.datasets import interaction_fingerprint, load_dataset
-from orchidrec.errors import ConfigurationError, SerializationError
+from orchidrec.demo import demo_dataset
+from orchidrec.errors import ConfigurationError, SerializationError, ValidationError
 from orchidrec.reporting import benchmark_csv, benchmark_html, save_benchmark_reports
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -571,6 +573,39 @@ class BenchmarkReportingTests(unittest.TestCase):
             self.assertEqual(paths.to_dict()["html"], str(paths.html_path))
             self.assertTrue(paths.csv_path.read_text(encoding="utf-8").endswith("\n"))
             self.assertIn("<!doctype html>", paths.html_path.read_text(encoding="utf-8"))
+
+    def test_reports_reject_dataset_name_and_hardlink_aliases_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "benchmark.json"
+            demo_dataset().save_json(source)
+            original = source.read_bytes()
+            config = benchmark_config_from_dict(
+                {
+                    "schema_version": 1,
+                    "data": {"path": str(source), "format": "orchidrec-json"},
+                    "models": [
+                        {"label": "ease", "name": "ease", "params": {"regularization": 1}},
+                        {"label": "pop", "name": "popularity"},
+                    ],
+                    "evaluation": {"bootstrap_samples": 10},
+                }
+            )
+            result = run_benchmark(config)
+            with self.assertRaisesRegex(ValidationError, "different files"):
+                save_benchmark_reports(result, directory)
+            self.assertEqual(source.read_bytes(), original)
+
+            source.rename(Path(directory) / "events.json")
+            events = Path(directory) / "events.json"
+            output = Path(directory) / "benchmark.csv"
+            os.link(events, output)
+            config = benchmark_config_from_dict(
+                {**config.to_dict(), "data": {"path": str(events), "format": "orchidrec-json"}}
+            )
+            result = run_benchmark(config)
+            with self.assertRaisesRegex(ValidationError, "different files"):
+                save_benchmark_reports(result, directory)
+            self.assertEqual(events.read_bytes(), original)
 
     def test_reporting_rejects_wrong_types_and_wraps_bad_destination(self) -> None:
         for function in (benchmark_csv, benchmark_html):

@@ -6,7 +6,21 @@ import unittest
 
 from orchidrec.data import Interaction, InteractionDataset
 from orchidrec.errors import NotFittedError, ValidationError
-from orchidrec.models import ImplicitMF, ItemKNN, Popularity
+from orchidrec.models import EASE, ConfidenceALS, ImplicitMF, ItemKNN, Popularity, UserKNN
+
+
+class LyingInt(int):
+    def __le__(self, other: object) -> bool:
+        return True
+
+    def __ge__(self, other: object) -> bool:
+        return True
+
+    def __lt__(self, other: object) -> bool:
+        return False
+
+    def __gt__(self, other: object) -> bool:
+        return False
 
 
 def collaborative_dataset() -> InteractionDataset:
@@ -87,6 +101,28 @@ class CommonModelBehaviorTests(unittest.TestCase):
         for k in (0, -1, True):
             with self.subTest(k=k), self.assertRaises(ValidationError):
                 model.recommend("u", k)  # type: ignore[arg-type]
+
+    def test_integer_subclasses_cannot_cross_public_integer_boundaries(self) -> None:
+        deceptive = LyingInt(-1)
+        constructors = (
+            lambda: ItemKNN(neighbors=deceptive),
+            lambda: UserKNN(neighbors=deceptive),
+            lambda: ImplicitMF(factors=deceptive),
+            lambda: ImplicitMF(epochs=deceptive),
+            lambda: ImplicitMF(negative_samples=deceptive),
+            lambda: ImplicitMF(seed=deceptive),
+            lambda: ConfidenceALS(factors=deceptive),
+            lambda: ConfidenceALS(epochs=deceptive),
+            lambda: ConfidenceALS(seed=deceptive),
+            lambda: EASE(max_items=deceptive),
+            lambda: EASE(max_interactions=deceptive),
+            lambda: EASE(max_work_units=deceptive),
+        )
+        for constructor in constructors:
+            with self.subTest(constructor=constructor), self.assertRaises(ValidationError):
+                constructor()
+        with self.assertRaises(ValidationError):
+            Popularity().fit(collaborative_dataset()).recommend("u", deceptive)
 
     def test_ranks_are_one_based_and_contiguous(self) -> None:
         result = Popularity().fit(collaborative_dataset()).recommend("new", 3)

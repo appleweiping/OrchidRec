@@ -25,7 +25,7 @@ class ItemKNN(BaseRecommender):
 
     def __init__(self, *, neighbors: int = 40, shrinkage: float = 10.0) -> None:
         super().__init__()
-        if isinstance(neighbors, bool) or not isinstance(neighbors, int) or neighbors <= 0:
+        if type(neighbors) is not int or neighbors <= 0:
             raise ValidationError("neighbors must be a positive integer")
         if isinstance(shrinkage, bool) or not isinstance(shrinkage, (int, float)):
             raise ValidationError("shrinkage must be a finite non-negative number")

@@ -85,7 +85,7 @@ def _plain_text(value: object, name: str) -> str:
 
 
 def _plain_int(value: object, name: str, *, positive: bool = False) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+    if type(value) is not int:
         qualifier = "a positive " if positive else "an "
         raise ValidationError(f"{name} must be {qualifier}integer")
     result = int(int.__index__(value))
@@ -897,10 +897,7 @@ class EncodedFeatureDataset(Sequence[EncodedFeatureRow]):
                     total_values += 1
                 if feature.kind.is_token:
                     token_values = value if isinstance(value, tuple) else (value,)
-                    if any(
-                        isinstance(item, bool) or not isinstance(item, int) or item < 0
-                        for item in token_values
-                    ):
+                    if any(type(item) is not int or item < 0 for item in token_values):
                         raise ValidationError("encoded token indices must be non-negative integers")
                 else:
                     numeric_values = value if isinstance(value, tuple) else (value,)

@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Sequence
-from contextlib import suppress
 from pathlib import Path
 
 from orchidrec import __version__
+from orchidrec._files import require_distinct_paths
 from orchidrec.benchmark import run_benchmark
 from orchidrec.benchmark_config import load_benchmark_config
 from orchidrec.config import load_config
@@ -114,19 +113,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _require_distinct_paths(paths: dict[str, Path]) -> None:
-    names = tuple(paths)
-    resolved = {name: path.resolve() for name, path in paths.items()}
-    for index, left in enumerate(names):
-        for right in names[index + 1 :]:
-            same_file = False
-            with suppress(OSError):
-                same_file = (
-                    paths[left].exists()
-                    and paths[right].exists()
-                    and os.path.samefile(paths[left], paths[right])
-                )
-            if resolved[left] == resolved[right] or same_file:
-                raise ValidationError(f"--{left} and --{right} must refer to different files")
+    require_distinct_paths({f"--{name}": path for name, path in paths.items()})
 
 
 def _feature_limits(args: argparse.Namespace) -> FeatureLimits:
@@ -154,7 +141,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "run":
-            result = run_experiment(load_config(args.config))
+            config = load_config(args.config)
+            paths = {"config": args.config, "data.path": config.data.path}
+            if config.output.model_path is not None:
+                paths["output.model_path"] = config.output.model_path
+            if config.output.report_path is not None:
+                paths["output.report_path"] = config.output.report_path
+            require_distinct_paths(paths)
+            result = run_experiment(config)
             print(json.dumps(result.to_dict(), indent=2, sort_keys=True, ensure_ascii=False))
             return 0
         if args.command == "demo":
@@ -194,8 +188,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         if args.command == "benchmark":
-            benchmark_result = run_benchmark(load_benchmark_config(args.config))
-            report_paths = save_benchmark_reports(benchmark_result, args.output_dir)
+            benchmark_config = load_benchmark_config(args.config)
+            require_distinct_paths(
+                {
+                    "config": args.config,
+                    "data.path": benchmark_config.data.path,
+                    "benchmark.json": args.output_dir / "benchmark.json",
+                    "benchmark.csv": args.output_dir / "benchmark.csv",
+                    "benchmark.html": args.output_dir / "benchmark.html",
+                }
+            )
+            benchmark_result = run_benchmark(benchmark_config)
+            report_paths = save_benchmark_reports(
+                benchmark_result, args.output_dir, protected_paths={"config": args.config}
+            )
             summary: dict[str, object] = {
                 "reports": report_paths.to_dict(),
                 "dataset": benchmark_result.dataset.to_dict(),

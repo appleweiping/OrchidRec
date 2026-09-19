@@ -12,7 +12,27 @@ from orchidrec.benchmark_config import (
 from orchidrec.errors import ConfigurationError
 
 
+class LyingInt(int):
+    def __le__(self, other: object) -> bool:
+        return True
+
+    def __ge__(self, other: object) -> bool:
+        return True
+
+
 class BenchmarkConfigTests(unittest.TestCase):
+    def test_integer_subclasses_are_rejected_at_benchmark_boundaries(self) -> None:
+        variants = (
+            {"schema_version": LyingInt(1)},
+            {"seed": LyingInt(42)},
+            {"evaluation": {"bootstrap_samples": LyingInt(10)}},
+            {"tuning": {"implicit_mf_seeds": [LyingInt(42)]}},
+        )
+        for change in variants:
+            payload = self.minimal() | change
+            with self.subTest(change=change), self.assertRaises(ConfigurationError):
+                benchmark_config_from_dict(payload)
+
     def minimal(self) -> dict[str, object]:
         return {
             "schema_version": 1,
@@ -33,6 +53,7 @@ class BenchmarkConfigTests(unittest.TestCase):
                 "item-knn",
                 "bpr-mf",
                 "confidence-als",
+                "ease",
                 "user-knn",
                 "sequential-markov",
             ],

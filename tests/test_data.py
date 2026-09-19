@@ -29,13 +29,17 @@ class InteractionTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Interaction(user_id="", item_id="x")
 
+    def test_non_identifier_object_is_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            Interaction(user_id="u", item_id=object())  # type: ignore[arg-type]
+
     def test_nonpositive_or_nonfinite_value_is_rejected(self) -> None:
         for value in (0, -1, math.inf, math.nan, True, 10**400):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 Interaction(user_id="u", item_id="i", value=value)  # type: ignore[arg-type]
 
     def test_nonfinite_timestamp_is_rejected(self) -> None:
-        for timestamp in (math.inf, 10**400):
+        for timestamp in (math.inf, 10**400, True, "tomorrow"):
             with self.subTest(timestamp=timestamp), self.assertRaises(ValidationError):
                 Interaction(user_id="u", item_id="i", timestamp=timestamp)
 
@@ -43,6 +47,10 @@ class InteractionTests(unittest.TestCase):
         event = Interaction.from_record({"user_id": "u", "item_id": "i"})
         self.assertEqual(event.value, 1.0)
         self.assertIsNone(event.timestamp)
+
+    def test_from_record_requires_mapping(self) -> None:
+        with self.assertRaises(ValidationError):
+            Interaction.from_record([])  # type: ignore[arg-type]
 
     def test_from_record_rejects_missing_fields(self) -> None:
         with self.assertRaises(ValidationError):
@@ -89,6 +97,18 @@ class DatasetTests(unittest.TestCase):
     def test_item_counts_can_be_weighted(self) -> None:
         self.assertEqual(self.dataset.item_counts(), {"a": 1.0, "b": 2.0})
         self.assertEqual(self.dataset.item_counts(weighted=True), {"a": 1.0, "b": 5.0})
+
+    def test_weighted_item_counts_round_once_independent_of_event_order(self) -> None:
+        rows = [
+            Interaction("u1", "a", 1e16),
+            Interaction("u2", "a", 1.0),
+            Interaction("u3", "a", 1.0),
+            Interaction("u1", "b", 2.0),
+        ]
+        forward = InteractionDataset(rows)
+        backward = InteractionDataset(reversed(rows))
+        self.assertEqual(forward.item_counts(weighted=True), {"a": 1.0000000000000002e16, "b": 2.0})
+        self.assertEqual(forward.item_counts(weighted=True), backward.item_counts(weighted=True))
 
     def test_weighted_item_count_overflow_is_rejected(self) -> None:
         dataset = InteractionDataset([Interaction("u1", "a", 1e308), Interaction("u2", "a", 1e308)])
@@ -147,6 +167,9 @@ class StableIdMapTests(unittest.TestCase):
             with self.subTest(ids=ids), self.assertRaises(ValidationError):
                 StableIdMap(ids)
 
+        with self.assertRaises(ValidationError):
+            StableIdMap("ab")  # type: ignore[arg-type]
+
     def test_id_values_reject_a_bare_string_iterable(self) -> None:
         with self.assertRaises(ValidationError):
             StableIdMap.from_values("ab")
@@ -183,6 +206,11 @@ class StableIdMapTests(unittest.TestCase):
     def test_duplicate_state_is_rejected(self) -> None:
         with self.assertRaises(SerializationError):
             StableIdMap.from_state({"ids": ["a", "a"]})
+
+    def test_map_state_requires_ids_array(self) -> None:
+        for state in (None, {"ids": ()}, {"ids": [], "extra": 1}):
+            with self.subTest(state=state), self.assertRaises(SerializationError):
+                StableIdMap.from_state(state)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

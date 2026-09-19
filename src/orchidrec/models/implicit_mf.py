@@ -29,17 +29,13 @@ class ImplicitMF(BaseRecommender):
         seed: int = 42,
     ) -> None:
         super().__init__()
-        if isinstance(factors, bool) or not isinstance(factors, int) or factors <= 0:
+        if type(factors) is not int or factors <= 0:
             raise ValidationError("factors must be a positive integer")
-        if isinstance(epochs, bool) or not isinstance(epochs, int) or epochs <= 0:
+        if type(epochs) is not int or epochs <= 0:
             raise ValidationError("epochs must be a positive integer")
-        if (
-            isinstance(negative_samples, bool)
-            or not isinstance(negative_samples, int)
-            or negative_samples <= 0
-        ):
+        if type(negative_samples) is not int or negative_samples <= 0:
             raise ValidationError("negative_samples must be a positive integer")
-        if isinstance(seed, bool) or not isinstance(seed, int):
+        if type(seed) is not int:
             raise ValidationError("seed must be an integer")
         if isinstance(learning_rate, bool) or not isinstance(learning_rate, (int, float)):
             raise ValidationError("learning_rate must be a finite positive number")

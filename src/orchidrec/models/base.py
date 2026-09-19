@@ -117,7 +117,7 @@ class BaseRecommender(ABC):
     ) -> list[Recommendation]:
         """Return stable score-descending top-k recommendations."""
 
-        if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+        if type(k) is not int or k <= 0:
             raise ValidationError("k must be a positive integer")
         if not isinstance(exclude_seen, bool):
             raise ValidationError("exclude_seen must be a boolean")
@@ -170,6 +170,11 @@ class BaseRecommender(ABC):
 
     def _base_state(self) -> dict[str, Any]:
         self._require_fitted()
+        return self._snapshot_base_state()
+
+    def _snapshot_base_state(self) -> dict[str, Any]:
+        """Snapshot the prepared common state, including during a model fit."""
+
         user_ids = sorted(self._seen, key=stable_id_key)
         return {
             "catalog": list(self._catalog),
@@ -273,8 +278,7 @@ def parse_envelope(
     if (
         not isinstance(state["format"], str)
         or state["format"] != MODEL_FORMAT
-        or isinstance(state["schema_version"], bool)
-        or not isinstance(state["schema_version"], int)
+        or type(state["schema_version"]) is not int
         or state["schema_version"] != MODEL_SCHEMA_VERSION
     ):
         raise SerializationError("unsupported OrchidRec model format or schema version")

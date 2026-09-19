@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from orchidrec._json import strict_json_loads
+from orchidrec.cli import main
 from orchidrec.data import Interaction, InteractionDataset
 from orchidrec.errors import NotFittedError, SerializationError
 from orchidrec.models import (
+    EASE,
+    ConfidenceALS,
     ImplicitMF,
     ItemKNN,
     Popularity,
+    SequentialMarkov,
+    UserKNN,
     load_model,
     model_from_state,
     save_model,
@@ -21,11 +30,11 @@ from orchidrec.models import (
 def dataset() -> InteractionDataset:
     return InteractionDataset(
         [
-            Interaction("u1", "a"),
-            Interaction("u1", "b"),
-            Interaction("u2", "a"),
-            Interaction("u2", "c"),
-            Interaction("u3", "b"),
+            Interaction("u1", "a", timestamp=1),
+            Interaction("u1", "b", timestamp=2),
+            Interaction("u2", "a", timestamp=3),
+            Interaction("u2", "c", timestamp=4),
+            Interaction("u3", "b", timestamp=5),
         ]
     )
 
@@ -36,6 +45,10 @@ class ModelSerializationTests(unittest.TestCase):
             Popularity().fit(dataset()),
             ItemKNN(neighbors=2, shrinkage=1).fit(dataset()),
             ImplicitMF(factors=3, epochs=3, seed=5).fit(dataset()),
+            ConfidenceALS(factors=2, epochs=1, seed=5).fit(dataset()),
+            EASE(regularization=1.0).fit(dataset()),
+            UserKNN(neighbors=2, shrinkage=1).fit(dataset()),
+            SequentialMarkov().fit(dataset()),
         ]
 
     def test_state_round_trip_preserves_recommendations(self) -> None:
@@ -243,6 +256,72 @@ class ModelSerializationTests(unittest.TestCase):
             path.write_text(json.dumps([]), encoding="utf-8")
             with self.assertRaises(SerializationError):
                 load_model(path)
+
+    def test_model_loader_bounds_bytes_before_reading_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "oversized.json"
+            path.write_bytes(b" " * 33)
+            with (
+                mock.patch("orchidrec.models.io.MAX_MODEL_FILE_BYTES", 32),
+                self.assertRaisesRegex(SerializationError, "32-byte"),
+            ):
+                load_model(path)
+
+            false_small_stat = mock.Mock(st_size=0)
+            with (
+                mock.patch("orchidrec.models.io.MAX_MODEL_FILE_BYTES", 32),
+                mock.patch.object(Path, "stat", return_value=false_small_stat),
+                self.assertRaisesRegex(SerializationError, "32-byte"),
+            ):
+                load_model(path)
+
+    def test_strict_json_failures_are_domain_errors_without_cli_tracebacks(self) -> None:
+        invalid_payloads = {
+            "utf8": b"\xff",
+            "depth": b"[" * 129 + b"0" + b"]" * 129,
+            "nonfinite": b'{"value":1e999}',
+            "surrogate": b'{"value":"\\ud800"}',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for name, payload in invalid_payloads.items():
+                path = Path(directory) / f"{name}.json"
+                path.write_bytes(payload)
+                with self.subTest(name=name), self.assertRaises(SerializationError):
+                    load_model(path)
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    exit_code = main(["inspect", str(path)])
+                self.assertEqual(exit_code, 2)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("error:", stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_strict_decoder_rejects_oversized_integer_nontext_and_surrogate_key(self) -> None:
+        invalid = (
+            ("1" * 4_097, "integer exceeds"),
+            (object(), "text or UTF-8 bytes"),
+            ('{"\\ud800": 1}', "Unicode scalar"),
+        )
+        for payload, expected in invalid:
+            with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, expected):
+                strict_json_loads(payload)  # type: ignore[arg-type]
+
+    def test_decoder_recursion_error_is_normalized_for_library_and_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "recursive.json"
+            path.write_bytes(b"{}")
+            with mock.patch("orchidrec._json.json.loads", side_effect=RecursionError):
+                with self.assertRaisesRegex(SerializationError, "maximum depth"):
+                    load_model(path)
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    exit_code = main(["inspect", str(path)])
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("maximum depth", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_missing_model_file_is_rejected(self) -> None:
         with self.assertRaises(SerializationError):

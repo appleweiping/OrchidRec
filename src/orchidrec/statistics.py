@@ -72,14 +72,14 @@ def _validated_values(values: Iterable[int | float], name: str) -> tuple[float, 
 
 
 def _validated_options(samples: int, confidence: int | float, seed: int) -> float:
-    if isinstance(samples, bool) or not isinstance(samples, int) or samples <= 0:
+    if type(samples) is not int or samples <= 0:
         raise ValidationError("samples must be a positive integer")
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         raise ValidationError("confidence must be a finite number between 0 and 1")
     numeric_confidence = safe_float(confidence)
     if not math.isfinite(numeric_confidence) or not 0.0 < numeric_confidence < 1.0:
         raise ValidationError("confidence must be a finite number between 0 and 1")
-    if isinstance(seed, bool) or not isinstance(seed, int):
+    if type(seed) is not int:
         raise ValidationError("seed must be an integer")
     return numeric_confidence
 

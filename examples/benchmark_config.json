@@ -51,6 +51,12 @@
       "grid": {"factors": [2, 4], "epochs": [1, 2], "alpha": [10.0, 40.0]}
     },
     {
+      "label": "ease",
+      "name": "ease",
+      "params": {"max_items": 256},
+      "grid": {"regularization": [10.0, 100.0]}
+    },
+    {
       "label": "user-knn",
       "name": "user_knn",
       "params": {},

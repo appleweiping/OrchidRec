@@ -1,10 +1,13 @@
 # Release process
 
-A push of a semantic-version tag such as `v0.6.0` invokes the release
+A push of a semantic-version tag such as `v0.7.0` invokes the release
 workflow. The workflow refuses a tag that differs from `project.version`,
 installs the committed `uv.lock`, runs the static and coverage-gated suite,
 builds both source and wheel distributions with the locked build backend, and
 installs each distribution into its own clean environment.
+The coverage gate checks covered branches divided by total branches, not the
+combined statement/branch percentage displayed by `coverage report`; it fails
+below 90%.
 
 The GitHub Release contains the distributions, a CycloneDX 1.5 runtime
 dependency SBOM, and `SHA256SUMS`. GitHub also records build-provenance
@@ -16,7 +19,7 @@ Verify a downloaded file with:
 
 ```bash
 sha256sum --check SHA256SUMS
-gh attestation verify orchidrec-0.6.0-py3-none-any.whl \
+gh attestation verify orchidrec-0.7.0-py3-none-any.whl \
   --repo appleweiping/OrchidRec
 ```
 

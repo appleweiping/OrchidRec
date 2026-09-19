@@ -9,9 +9,11 @@ import io
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from orchidrec._files import require_distinct_paths
 from orchidrec.benchmark import METRIC_NAMES, BenchmarkResult
 from orchidrec.errors import SerializationError
 
@@ -354,7 +356,12 @@ code {{ overflow-wrap: anywhere; }}
 """
 
 
-def save_benchmark_reports(result: BenchmarkResult, output_dir: str | Path) -> BenchmarkReportPaths:
+def save_benchmark_reports(
+    result: BenchmarkResult,
+    output_dir: str | Path,
+    *,
+    protected_paths: Mapping[str, Path] | None = None,
+) -> BenchmarkReportPaths:
     """Atomically write JSON, CSV, and standalone HTML artifacts."""
 
     if not isinstance(result, BenchmarkResult):
@@ -364,6 +371,17 @@ def save_benchmark_reports(result: BenchmarkResult, output_dir: str | Path) -> B
         json_path=destination / "benchmark.json",
         csv_path=destination / "benchmark.csv",
         html_path=destination / "benchmark.html",
+    )
+    inputs = dict(protected_paths or {})
+    if result.source_path is not None:
+        inputs["data.path"] = result.source_path
+    require_distinct_paths(
+        {
+            **inputs,
+            "benchmark.json": paths.json_path,
+            "benchmark.csv": paths.csv_path,
+            "benchmark.html": paths.html_path,
+        }
     )
     try:
         json_report = (

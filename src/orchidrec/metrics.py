@@ -36,7 +36,7 @@ class MetricReport:
 
 
 def _validate_k(k: int) -> None:
-    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+    if type(k) is not int or k <= 0:
         raise ValidationError("k must be a positive integer")
 
 

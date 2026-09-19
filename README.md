@@ -11,7 +11,7 @@ runtime dependencies outside the Python standard library**.
 
 It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
-deterministic ID mapping, three train/test split strategies, six
+deterministic ID mapping, three train/test split strategies, seven
 recommenders, six ranking metrics, user bootstrap intervals, paired model
 comparisons, leakage-safe typed feature preprocessing, portable JSON state,
 and JSON/CSV/standalone-HTML reports.
@@ -31,6 +31,7 @@ example instead:
 
 ```bash
 orchidrec run examples/config.json
+orchidrec run examples/ease_config.json
 ```
 
 To exercise the shared-split benchmark runner on the checked-in synthetic
@@ -100,6 +101,7 @@ Create `movielens-benchmark.json`:
     {"label": "item-knn", "name": "item_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
     {"label": "bpr-mf", "name": "implicit_mf", "params": {"factors": 16, "epochs": 5}},
     {"label": "confidence-als", "name": "confidence_als", "params": {"factors": 16, "epochs": 3, "alpha": 40.0, "regularization": 0.1}},
+    {"label": "ease", "name": "ease", "params": {"regularization": 100.0, "max_items": 256}},
     {"label": "user-knn", "name": "user_knn", "params": {"neighbors": 40, "shrinkage": 10.0}},
     {"label": "sequential-markov", "name": "sequential_markov", "params": {"weighted": true, "popularity_mix": 0.05}}
   ]
@@ -142,7 +144,7 @@ flowchart LR
     N -->|inner split| O[Training / validation]
     O -->|select only on validation| F[Selected parameters]
     N -->|disabled| F
-    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / confidence ALS / Markov| P[Refit on development]
+    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / confidence ALS / EASE / Markov| P[Refit on development]
     P -->|one final test evaluation| G[Candidate scores]
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
@@ -203,12 +205,12 @@ optional fields:
 | `timestamp` | finite number or `null` | Ordering value used by temporal splits. |
 
 Unknown fields are rejected. Repeated user-item events are allowed: Popularity,
-ItemKNN, and UserKNN aggregate their values, while ImplicitMF treats the pair as
-one positive preference. ConfidenceALS sums repeated values into one declared
-confidence before solving. SequentialMarkov consumes every timestamped event in
-chronological order and may therefore retain repeated transitions. A user-item
-pair is never split across training and test, so repeated events cannot leak the
-evaluation target into model fitting.
+ItemKNN, and UserKNN aggregate their values, while ImplicitMF and EASE treat the
+pair as one binary positive preference. ConfidenceALS sums repeated values into
+one declared confidence before solving. SequentialMarkov consumes every
+timestamped event in chronological order and may therefore retain repeated
+transitions. A user-item pair is never split across training and test, so
+repeated events cannot leak the evaluation target into model fitting.
 
 `StableIdMap` sorts integer IDs numerically before string IDs, which are sorted
 lexicographically. The mapping is therefore independent of input row order and
@@ -288,6 +290,28 @@ limited to 64, epochs to 100, confidence to `1e12`, stored factor state to five
 million values, and the standard-library work estimate to one billion small-
 matrix operations. Configurations beyond those explicit resource boundaries
 fail before factor allocation or optimization.
+
+### EASE
+
+Fits a closed-form shallow autoencoder over the deduplicated binary user-item
+matrix. Given `X`, it forms `G = X.T X + regularization * I`, computes the
+checked symmetric-positive-definite inverse `P`, and derives a zero-diagonal
+item coefficient matrix with `B_ij = -P_ij / P_jj`. Recommendations are the
+sum of a user's fitted item rows in `B`; unknown users use weighted popularity.
+
+The implementation uses a residual-checked Cholesky factorization and records
+the inverse residual, training interaction count, and deterministic work
+estimate in portable state. It rejects invalid pivots, non-finite arithmetic,
+tampered dimensions or diagonal values, and configurations beyond explicit
+item, interaction, and cubic-work limits before allocating the dense matrix.
+The standard-library implementation is intentionally bounded to at most 512
+items; it is a correctness-oriented baseline, not a large-catalog solver. See
+the [EASE model contract](docs/ease.md) for its equations, persisted invariants,
+resource policy, and reproducibility boundary.
+
+Experiment and benchmark commands reject report/model paths that alias an input
+dataset, configuration, or each other, including through hard links or symbolic
+links. Model and experiment-report files are staged before replacement.
 
 ### UserKNN
 
@@ -455,6 +479,11 @@ in the complete MovieLens example above.
       "grid": {"factors": [8, 16], "epochs": [3, 5], "alpha": [10.0, 40.0]}
     },
     {
+      "label": "ease",
+      "name": "ease",
+      "grid": {"regularization": [10.0, 100.0], "max_items": [256]}
+    },
+    {
       "label": "user-knn",
       "name": "user_knn",
       "grid": {"neighbors": [20, 40], "shrinkage": [0.0, 10.0]}
@@ -478,7 +507,7 @@ accepts `maximize` or `minimize` and defaults to `maximize` when omitted.
 As with the outer split, `validation_ratio` is validated but ignored by
 `leave_one_out`.
 
-Popularity, ItemKNN, UserKNN, and SequentialMarkov are deterministic and
+Popularity, ItemKNN, UserKNN, EASE, and SequentialMarkov are deterministic and
 therefore run once per candidate.
 ImplicitMF and ConfidenceALS run every candidate once for each distinct
 `implicit_mf_seeds` value and selection uses the arithmetic mean of that
@@ -528,6 +557,7 @@ values fail early. Supported model parameters are:
 | `item_knn` | `neighbors`, `shrinkage` |
 | `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed` |
 | `confidence_als` | `factors`, `epochs`, `alpha`, `regularization`, `seed` |
+| `ease` | `regularization`, `max_items`, `max_interactions`, `max_work_units` |
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
 
@@ -636,9 +666,10 @@ fields. Neither runner changes Python's process-global random state.
 - MovieLens rating thresholding discards lower ratings rather than learning
   from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration, UserKNN builds pairwise user
-  similarities, SequentialMarkov holds a sparse transition table, and
-  ImplicitMF uses simple SGD while ConfidenceALS solves small systems in pure
-  Python rather than optimized native kernels. Full MovieLens 1M runs can
+  similarities, SequentialMarkov holds a sparse transition table, ImplicitMF
+  uses simple SGD, ConfidenceALS solves many small systems, and EASE performs a
+  dense cubic factorization in pure Python rather than optimized native kernels.
+  Full MovieLens 1M runs can
   therefore be slow.
 - Typed feature preprocessing is in memory and produces standalone encoded
   rows; there is no distributed feature store, automatic interaction join, or
@@ -686,6 +717,9 @@ checks and explicit chronology-failure tests. ConfidenceALS is checked against
 a hand-solved linear system, an independently assembled normal equation, and an
 independently recomputed dense objective, in addition to persistence,
 determinism, resource, and cold-start tests.
+EASE adds a hand-computed closed-form coefficient oracle, an independent
+matrix-inverse oracle, persisted diagnostic invariants, order/duplicate
+semantics, resource-boundary tests, and experiment/benchmark round trips.
 The feature pipeline adds hand-computed vocabulary and normalization oracles,
 unseen-token and sequence semantics, extreme finite values, order invariance,
 strict checksum and schema tamper cases, bounded streaming persistence,
@@ -701,6 +735,8 @@ OrchidRec's implementation and public interfaces are independent. The
 Personalized Ranking from Implicit Feedback” (UAI 2009, arXiv:1205.2618).
 `ConfidenceALS` follows Hu, Koren, and Volinsky, “Collaborative Filtering for
 Implicit Feedback Datasets” (ICDM 2008, doi:10.1109/ICDM.2008.22).
+`EASE` follows Harald Steck, “Embarrassingly Shallow Autoencoders for Sparse
+Data” (WWW 2019, doi:10.1145/3308558.3313710).
 `UserKNN` uses the classical cosine-neighborhood formulation, and
 `SequentialMarkov` uses an empirical first-order item transition model.
 The citation identifies the published algorithm; no external project code is

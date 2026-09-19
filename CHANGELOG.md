@@ -6,6 +6,31 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.7.0] - 2026-09-19
+
+- Added a genuine EASE closed-form recommender over deduplicated binary
+  histories, with zero-diagonal item regression, popularity cold start, and
+  deterministic scoring and persistence.
+- Added a checked standard-library Cholesky inverse with symmetry,
+  conditioning, finiteness, and residual verification, plus explicit catalog,
+  interaction, state, and cubic-work limits.
+- Integrated EASE into strict experiment and benchmark configuration,
+  validation-only grid search, default seven-model comparisons, public imports,
+  examples, and clean-install model loading.
+- Added hand-computed coefficient and inverse oracles, duplicate/order
+  semantics, malformed-state checks, resource-boundary tests, and end-to-end
+  experiment and benchmark coverage.
+- Hardened persisted models with a 256 MiB read ceiling, interpreter-independent
+  JSON depth and integer limits, finite-number and Unicode-scalar validation,
+  exact built-in integer boundaries, and allocation-first EASE base-state
+  preflight. EASE loads now rebuild the closed-form solution once and reject
+  even single-ULP coefficient or residual changes.
+- Made weighted item popularity accurately rounded and input-order independent,
+  including for extreme finite event weights, while bounding extra summation
+  storage by the interaction count.
+- Added input/output alias guards, atomic model and report replacement, and an
+  independent branch-only coverage gate for CI and release.
+
 ## [0.6.0] - 2026-09-08
 
 - Added immutable, typed user, item, and interaction feature schemas for token,

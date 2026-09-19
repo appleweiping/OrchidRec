@@ -54,6 +54,7 @@ from orchidrec.features import (
 )
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
+    EASE,
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
@@ -89,6 +90,7 @@ from orchidrec.unbiased import (
 __all__ = [
     "DEFAULT_EXPONENT",
     "DEFAULT_MINIMUM_PROPENSITY",
+    "EASE",
     "PAD_INDEX",
     "UNKNOWN_INDEX",
     "BenchmarkConfig",
@@ -168,4 +170,4 @@ __all__ = [
     "uniform_exposure",
 ]
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

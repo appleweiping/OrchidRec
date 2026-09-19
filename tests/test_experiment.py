@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from orchidrec.config import config_from_dict
+from orchidrec.config import SplitConfig, config_from_dict
 from orchidrec.data import Interaction, InteractionDataset
 from orchidrec.demo import demo_dataset, run_demo
-from orchidrec.errors import ConfigurationError
-from orchidrec.experiment import build_model, run_experiment
+from orchidrec.errors import ConfigurationError, ValidationError
+from orchidrec.experiment import build_model, run_experiment, split_dataset
 from orchidrec.models import ImplicitMF, load_model
 
 
@@ -42,6 +44,7 @@ class ExperimentTests(unittest.TestCase):
                 "item_knn",
                 "implicit_mf",
                 "confidence_als",
+                "ease",
                 "user_knn",
                 "sequential_markov",
             ):
@@ -49,6 +52,17 @@ class ExperimentTests(unittest.TestCase):
                     result = run_experiment(self.make_config(directory, name))
                     self.assertEqual(result.model_type, name)
                     self.assertEqual(result.metrics.users, 6)
+
+    def test_library_entry_points_reject_invalid_model_config_and_split(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "unknown model"):
+            build_model("unknown", {}, experiment_seed=1)
+        with self.assertRaisesRegex(ConfigurationError, "config must"):
+            run_experiment(None)  # type: ignore[arg-type]
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.make_config(directory)
+            malformed = replace(config, split=SplitConfig(method="unknown"))
+            with self.assertRaisesRegex(ConfigurationError, "unknown split method"):
+                split_dataset(malformed, demo_dataset())
 
     def test_repeated_run_is_identical(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -66,6 +80,54 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(load_model(config.output.model_path).model_type, "item_knn")
             saved = json.loads(config.output.report_path.read_text(encoding="utf-8"))
             self.assertEqual(saved, result.to_dict())
+
+    def test_output_aliases_are_rejected_without_overwriting_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_path = Path(directory) / "events.json"
+            demo_dataset().save_json(data_path)
+            original = data_path.read_bytes()
+            for output in (
+                {"model_path": "events.json"},
+                {"report_path": "events.json"},
+                {"model_path": "same.json", "report_path": "same.json"},
+            ):
+                with self.subTest(output=output):
+                    config = config_from_dict(
+                        {
+                            "data": {"path": "events.json"},
+                            "model": {"name": "ease", "params": {"regularization": 1}},
+                            "output": output,
+                        },
+                        base_dir=directory,
+                    )
+                    with self.assertRaisesRegex(ValidationError, "different files"):
+                        run_experiment(config)
+                    self.assertEqual(data_path.read_bytes(), original)
+
+    def test_hardlink_and_symlink_output_aliases_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_path = Path(directory) / "events.json"
+            demo_dataset().save_json(data_path)
+            original = data_path.read_bytes()
+            aliases = (Path(directory) / "hardlink.json", Path(directory) / "symlink.json")
+            try:
+                os.link(data_path, aliases[0])
+                aliases[1].symlink_to(data_path)
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"filesystem does not support test links: {error}")
+            for alias in aliases:
+                with self.subTest(alias=alias):
+                    config = config_from_dict(
+                        {
+                            "data": {"path": "events.json"},
+                            "model": {"name": "ease"},
+                            "output": {"model_path": str(alias)},
+                        },
+                        base_dir=directory,
+                    )
+                    with self.assertRaisesRegex(ValidationError, "different files"):
+                        run_experiment(config)
+                    self.assertEqual(data_path.read_bytes(), original)
 
     def test_implicit_model_inherits_experiment_seed(self) -> None:
         model = build_model("implicit_mf", {"factors": 2, "epochs": 1}, experiment_seed=99)

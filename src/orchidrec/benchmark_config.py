@@ -14,6 +14,7 @@ from orchidrec._numeric import safe_float
 from orchidrec.datasets import DatasetFormat
 from orchidrec.errors import ConfigurationError, ValidationError
 from orchidrec.models import (
+    EASE,
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
@@ -97,7 +98,7 @@ class BenchmarkModelSpec:
 
 
 def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
-    """Return lightweight defaults across six built-in models."""
+    """Return lightweight defaults across seven built-in models."""
 
     return (
         BenchmarkModelSpec("popularity", "popularity", {"weighted": False}),
@@ -111,6 +112,11 @@ def default_benchmark_models() -> tuple[BenchmarkModelSpec, ...]:
             "confidence-als",
             "confidence_als",
             {"factors": 16, "epochs": 3, "alpha": 40.0, "regularization": 0.1},
+        ),
+        BenchmarkModelSpec(
+            "ease",
+            "ease",
+            {"regularization": 100.0, "max_items": 256},
         ),
         BenchmarkModelSpec("user-knn", "user_knn", {"neighbors": 40, "shrinkage": 10.0}),
         BenchmarkModelSpec(
@@ -180,7 +186,7 @@ def _finite_number(value: object, name: str) -> float:
 
 
 def _positive_int(value: object, name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+    if type(value) is not int or value <= 0:
         raise ConfigurationError(f"{name} must be a positive integer")
     return value
 
@@ -195,6 +201,7 @@ def _validated_model_parameters(
     model_types = {
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
+        "ease": EASE,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
@@ -233,12 +240,13 @@ def _parse_model(
         "item_knn",
         "implicit_mf",
         "confidence_als",
+        "ease",
         "user_knn",
         "sequential_markov",
     }:
         raise ConfigurationError(
             f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
-            "user_knn, or sequential_markov"
+            "ease, user_knn, or sequential_markov"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -253,6 +261,7 @@ def _parse_model(
             "seed",
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
+        "ease": {"regularization", "max_items", "max_interactions", "max_work_units"},
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }[name]
@@ -391,7 +400,7 @@ def _parse_tuning(
         )
     seeds: list[int] = []
     for index, value in enumerate(raw_seeds):
-        if isinstance(value, bool) or not isinstance(value, int):
+        if type(value) is not int:
             raise ConfigurationError(f"tuning.implicit_mf_seeds[{index}] must be an integer")
         seeds.append(value)
     if len(set(seeds)) != len(seeds):
@@ -419,10 +428,10 @@ def benchmark_config_from_dict(
         "benchmark configuration",
     )
     version = root.get("schema_version")
-    if isinstance(version, bool) or not isinstance(version, int) or version != 1:
+    if type(version) is not int or version != 1:
         raise ConfigurationError("benchmark schema_version must be 1")
     seed = root.get("seed", 42)
-    if isinstance(seed, bool) or not isinstance(seed, int):
+    if type(seed) is not int:
         raise ConfigurationError("seed must be an integer")
     if "data" not in root:
         raise ConfigurationError("benchmark configuration requires a data object")

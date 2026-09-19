@@ -20,11 +20,16 @@ EntityId = str | int
 def validate_entity_id(value: object, field_name: str = "entity_id") -> EntityId:
     """Validate and return an identifier supported by OrchidRec."""
 
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
+    if isinstance(value, bool):
         raise ValidationError(f"{field_name} must be a string or integer")
-    if isinstance(value, str) and not value:
-        raise ValidationError(f"{field_name} must not be an empty string")
-    return value
+    if isinstance(value, int):
+        return int(int.__index__(value))
+    if isinstance(value, str):
+        result = str.__str__(value)
+        if not result:
+            raise ValidationError(f"{field_name} must not be an empty string")
+        return result
+    raise ValidationError(f"{field_name} must be a string or integer")
 
 
 def stable_id_key(value: EntityId) -> tuple[int, int | str]:
@@ -202,14 +207,33 @@ class InteractionDataset(Sequence[Interaction]):
     def item_counts(self, *, weighted: bool = False) -> dict[EntityId, float]:
         """Count item events, optionally summing interaction values."""
 
-        counts: dict[EntityId, float] = defaultdict(float)
-        for interaction in self:
-            updated = counts[interaction.item_id] + (interaction.value if weighted else 1.0)
-            if not math.isfinite(updated):
-                raise ValidationError(
-                    f"aggregate count for item {interaction.item_id!r} is not finite"
-                )
-            counts[interaction.item_id] = updated
+        if weighted:
+            # The dataset already owns every event. Retain at most one float
+            # reference per event so fsum can round the exact per-item total
+            # once, independent of input order and without quadratic rescans.
+            values: dict[EntityId, list[float]] = defaultdict(list)
+            for interaction in self:
+                values[interaction.item_id].append(interaction.value)
+            counts: dict[EntityId, float] = {}
+            for item_id, weights in values.items():
+                try:
+                    total = math.fsum(weights)
+                except (OverflowError, ValueError) as error:
+                    raise ValidationError(
+                        f"aggregate count for item {item_id!r} is not finite"
+                    ) from error
+                if not math.isfinite(total):
+                    raise ValidationError(f"aggregate count for item {item_id!r} is not finite")
+                counts[item_id] = total
+        else:
+            counts = defaultdict(float)
+            for interaction in self:
+                updated = counts[interaction.item_id] + 1.0
+                if not math.isfinite(updated):
+                    raise ValidationError(
+                        f"aggregate count for item {interaction.item_id!r} is not finite"
+                    )
+                counts[interaction.item_id] = updated
         return {item_id: counts[item_id] for item_id in sorted(counts, key=stable_id_key)}
 
 
@@ -275,7 +299,7 @@ class StableIdMap:
     def id_at(self, index: int) -> EntityId:
         """Return the ID at an index."""
 
-        if isinstance(index, bool) or not isinstance(index, int):
+        if type(index) is not int:
             raise ValidationError("index must be an integer")
         if index < 0:
             raise ValidationError(f"ID index out of range: {index}")

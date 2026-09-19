@@ -189,6 +189,7 @@ class ExtendedModelIntegrationTests(unittest.TestCase):
                 "item_knn",
                 "implicit_mf",
                 "confidence_als",
+                "ease",
                 "user_knn",
                 "sequential_markov",
             ],

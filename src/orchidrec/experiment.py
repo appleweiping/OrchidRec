@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from orchidrec._files import atomic_write_text, require_distinct_paths
 from orchidrec.config import ExperimentConfig
 from orchidrec.data import EntityId, InteractionDataset, stable_id_key
 from orchidrec.errors import ConfigurationError, SerializationError, ValidationError
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
+    EASE,
     BaseRecommender,
     ConfidenceALS,
     ImplicitMF,
@@ -87,13 +89,12 @@ class ExperimentResult:
     def save_json(self, path: str | Path) -> None:
         destination = Path(path)
         try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(
+            atomic_write_text(
+                destination,
                 json.dumps(
                     self.to_dict(), indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
                 )
                 + "\n",
-                encoding="utf-8",
             )
         except (OSError, TypeError, ValueError) as exc:
             raise SerializationError(
@@ -110,6 +111,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
     registry: dict[str, type[BaseRecommender]] = {
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
+        "ease": EASE,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
@@ -141,6 +143,12 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
 
     if not isinstance(config, ExperimentConfig):
         raise ConfigurationError("config must be an ExperimentConfig")
+    paths = {"data.path": config.data.path}
+    if config.output.model_path is not None:
+        paths["output.model_path"] = config.output.model_path
+    if config.output.report_path is not None:
+        paths["output.report_path"] = config.output.report_path
+    require_distinct_paths(paths)
     dataset = InteractionDataset.load_json(config.data.path)
     split = split_dataset(config, dataset)
     if not split.train:

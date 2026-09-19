@@ -9,7 +9,8 @@ import math
 import random
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from orchidrec.benchmark_config import (
@@ -238,6 +239,7 @@ class BenchmarkResult:
     models: tuple[BenchmarkModelResult, ...]
     comparisons: tuple[BenchmarkComparison, ...]
     tuning: BenchmarkTuningResult | None = None
+    source_path: Path | None = field(default=None, compare=False, repr=False)
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -841,4 +843,5 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         models=model_results,
         comparisons=comparisons,
         tuning=tuning_result,
+        source_path=config.data.path,
     )

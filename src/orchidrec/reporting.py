@@ -88,13 +88,46 @@ def benchmark_csv(result: BenchmarkResult) -> str:
         "selected",
         "direction",
     )
-    fields = base_fields + tuning_fields if result.tuning is not None else base_fields
+    fields: tuple[str, ...] = (
+        base_fields + tuning_fields if result.tuning is not None else base_fields
+    )
+    if result.candidate_plan is not None:
+        fields += (
+            "evaluation_mode",
+            "sampling_strategy",
+            "requested_negatives",
+            "candidate_partition",
+            "candidate_sha256",
+        )
     writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
+
+    def write_row(row: dict[str, object], *, partition: str = "test") -> None:
+        if result.candidate_plan is not None:
+            if partition == "validation":
+                candidate_sha256 = (
+                    result.tuning.validation_candidate_fingerprint
+                    if result.tuning is not None
+                    else None
+                )
+                if candidate_sha256 is None:
+                    raise SerializationError("sampled tuning report lacks validation candidates")
+            else:
+                candidate_sha256 = result.candidate_plan.fingerprint
+            row = {
+                **row,
+                "evaluation_mode": "sampled",
+                "sampling_strategy": result.candidate_plan.sampling.strategy,
+                "requested_negatives": result.candidate_plan.sampling.negatives,
+                "candidate_partition": partition,
+                "candidate_sha256": candidate_sha256,
+            }
+        writer.writerow(row)
+
     for model in result.models:
         for metric in METRIC_NAMES:
             interval = model.confidence_intervals[metric]
-            writer.writerow(
+            write_row(
                 {
                     "row_type": "model",
                     "left_or_model": _spreadsheet_text(model.label),
@@ -112,7 +145,7 @@ def benchmark_csv(result: BenchmarkResult) -> str:
         for metric in METRIC_NAMES:
             statistic = comparison.metrics[metric]
             interval = statistic.difference
-            writer.writerow(
+            write_row(
                 {
                     "row_type": "comparison_right_minus_left",
                     "left_or_model": _spreadsheet_text(comparison.left_label),
@@ -136,7 +169,7 @@ def benchmark_csv(result: BenchmarkResult) -> str:
                 allow_nan=False,
             )
             for candidate in tuning_model.candidates:
-                writer.writerow(
+                write_row(
                     {
                         "row_type": "tuning_candidate",
                         "left_or_model": _spreadsheet_text(tuning_model.label),
@@ -152,10 +185,11 @@ def benchmark_csv(result: BenchmarkResult) -> str:
                         "search_space_json": search_space,
                         "selected": candidate.selected,
                         "direction": result.tuning.direction,
-                    }
+                    },
+                    partition="validation",
                 )
             for trial in tuning_model.trials:
-                writer.writerow(
+                write_row(
                     {
                         "row_type": "tuning_trial",
                         "left_or_model": _spreadsheet_text(tuning_model.label),
@@ -172,7 +206,8 @@ def benchmark_csv(result: BenchmarkResult) -> str:
                             allow_nan=False,
                         ),
                         "direction": result.tuning.direction,
-                    }
+                    },
+                    partition="validation",
                 )
     return output.getvalue()
 
@@ -230,8 +265,27 @@ def benchmark_html(result: BenchmarkResult) -> str:
     headers = "".join(f"<th>{html.escape(name.title())}</th>" for name in METRIC_NAMES)
     dataset = result.dataset
     confidence_percent = result.confidence * 100.0
+    sampling_html = "<p><strong>Evaluation mode:</strong> full-sort over the training catalog.</p>"
+    if result.candidate_plan is not None:
+        sampling_html = (
+            "<p><strong>Evaluation mode:</strong> sampled "
+            f"({html.escape(result.candidate_plan.sampling.strategy)}, "
+            f"{result.candidate_plan.sampling.negatives} requested negatives per user). "
+            "Scores are conditional on these candidates and are not directly comparable "
+            "with full-sort scores.</p>"
+            f"<p><span class='label'>Outer test candidate SHA-256</span><code>{result.candidate_plan.fingerprint}</code></p>"
+        )
     tuning_html = ""
     if result.tuning is not None:
+        validation_candidate_html = ""
+        if result.candidate_plan is not None:
+            validation_candidate = result.tuning.validation_candidate_fingerprint
+            if validation_candidate is None:
+                raise SerializationError("sampled tuning report lacks validation candidates")
+            validation_candidate_html = (
+                "<p><span class='label'>Inner validation candidate SHA-256</span>"
+                f"<code>{validation_candidate}</code></p>"
+            )
         tuning_rows: list[str] = []
         tuning_trial_rows: list[str] = []
         for tuning_model in result.tuning.models:
@@ -282,6 +336,7 @@ def benchmark_html(result: BenchmarkResult) -> str:
         tuning = result.tuning
         tuning_html = f"""
 <h2>Validation-only model selection</h2>
+{validation_candidate_html}
 <p>Outer test data was evaluated only after all searches completed. Candidates use a
 <strong>{html.escape(tuning.validation_method)}</strong> validation split and select
 <strong>{html.escape(tuning.selection_metric)}</strong> by
@@ -328,6 +383,7 @@ code {{ overflow-wrap: anywhere; }}
 <h1>OrchidRec benchmark</h1>
 <p>Shared <strong>{html.escape(result.split_method)}</strong> split, K={result.k},
 {result.bootstrap_samples} paired bootstrap samples, {confidence_percent:.1f}% intervals.</p>
+{sampling_html}
 <div class="cards">
   <div class="card"><span class="label">Dataset</span>{html.escape(dataset.format)} / {html.escape(dataset.source_name)}</div>
   <div class="card"><span class="label">Retained events</span>{dataset.retained_interactions:,}</div>

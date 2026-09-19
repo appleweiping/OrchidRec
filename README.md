@@ -13,7 +13,8 @@ It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
 deterministic ID mapping, three train/test split strategies, seven
 recommenders, six ranking metrics, user bootstrap intervals, paired model
-comparisons, leakage-safe typed feature preprocessing, portable JSON state,
+comparisons, opt-in uniform/popularity sampled candidate evaluation,
+leakage-safe typed feature preprocessing, portable JSON state,
 and JSON/CSV/standalone-HTML reports.
 
 ## Quick start
@@ -32,6 +33,7 @@ example instead:
 ```bash
 orchidrec run examples/config.json
 orchidrec run examples/ease_config.json
+orchidrec run examples/sampled_config.json
 ```
 
 To exercise the shared-split benchmark runner on the checked-in synthetic
@@ -39,10 +41,15 @@ example:
 
 ```bash
 orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/benchmark
+orchidrec benchmark examples/sampled_benchmark_config.json --output-dir artifacts/sampled-benchmark
 ```
 
 Open `artifacts/benchmark/benchmark.html` directly in a browser; it has no
 external scripts, fonts, or network requests.
+
+Sampled evaluation is opt-in and reports its mode, sampler, and candidate-set
+fingerprint. Its metrics are **not** directly comparable to full-sort metrics;
+see the [sampling guide](docs/sampling.md) for leakage and resource contracts.
 
 Fit a typed feature pipeline on training rows, then reuse its frozen
 vocabularies and numeric statistics on validation rows:

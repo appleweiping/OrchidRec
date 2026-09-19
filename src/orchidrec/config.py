@@ -13,6 +13,7 @@ from orchidrec._json import strict_json_loads
 from orchidrec._numeric import safe_float
 from orchidrec.errors import ConfigurationError, ValidationError
 from orchidrec.propensity import DEFAULT_EXPONENT, DEFAULT_MINIMUM_PROPENSITY
+from orchidrec.sampling import SamplingConfig, parse_sampling
 
 
 def _object(value: object, name: str) -> Mapping[str, Any]:
@@ -79,6 +80,7 @@ class EvaluationConfig:
     k: int = 10
     exclude_seen: bool = True
     exposure: ExposureConfig | None = None
+    sampling: SamplingConfig | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +118,11 @@ class ExperimentConfig:
                         "exponent": self.evaluation.exposure.exponent,
                         "minimum": self.evaluation.exposure.minimum,
                     }
+                ),
+                **(
+                    {"sampling": self.evaluation.sampling.to_dict()}
+                    if self.evaluation.sampling
+                    else {}
                 ),
             },
             "output": {
@@ -222,11 +229,14 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         raise ConfigurationError(f"invalid model.params for {model_name}: {exc}") from exc
 
     evaluation = _object(root.get("evaluation", {}), "evaluation")
-    _unknown(evaluation, {"k", "exclude_seen", "exposure"}, "evaluation")
+    _unknown(evaluation, {"k", "exclude_seen", "exposure", "sampling"}, "evaluation")
     k = _positive_int(evaluation.get("k", 10), "evaluation.k")
     exclude_seen = evaluation.get("exclude_seen", True)
     if not isinstance(exclude_seen, bool):
         raise ConfigurationError("evaluation.exclude_seen must be a boolean")
+    sampling = parse_sampling(evaluation.get("sampling"))
+    if sampling is not None and not exclude_seen:
+        raise ConfigurationError("sampled evaluation requires evaluation.exclude_seen=true")
     raw_exposure = evaluation.get("exposure")
     if raw_exposure is None:
         exposure = None
@@ -265,7 +275,9 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         data=DataConfig(path=resolved_data),
         split=SplitConfig(method=split_method, test_ratio=numeric_ratio),
         model=ModelConfig(name=model_name, params=dict(params)),
-        evaluation=EvaluationConfig(k=k, exclude_seen=exclude_seen, exposure=exposure),
+        evaluation=EvaluationConfig(
+            k=k, exclude_seen=exclude_seen, exposure=exposure, sampling=sampling
+        ),
         output=OutputConfig(
             report_path=optional_path("report_path"), model_path=optional_path("model_path")
         ),

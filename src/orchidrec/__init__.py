@@ -71,6 +71,12 @@ from orchidrec.propensity import (
     uniform_exposure,
 )
 from orchidrec.reporting import BenchmarkReportPaths, save_benchmark_reports
+from orchidrec.sampling import (
+    SAMPLER_REGISTRY,
+    CandidatePlan,
+    SamplingConfig,
+    sample_candidates,
+)
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
 from orchidrec.statistics import (
     BootstrapInterval,
@@ -92,6 +98,7 @@ __all__ = [
     "DEFAULT_MINIMUM_PROPENSITY",
     "EASE",
     "PAD_INDEX",
+    "SAMPLER_REGISTRY",
     "UNKNOWN_INDEX",
     "BenchmarkConfig",
     "BenchmarkDataConfig",
@@ -104,6 +111,7 @@ __all__ = [
     "BenchmarkTuningResult",
     "BenchmarkValidationSplitConfig",
     "BootstrapInterval",
+    "CandidatePlan",
     "ConfidenceALS",
     "DatasetFormat",
     "DatasetSummary",
@@ -132,6 +140,7 @@ __all__ = [
     "PairedBootstrapResult",
     "Popularity",
     "Recommendation",
+    "SamplingConfig",
     "SequenceKeep",
     "SequentialMarkov",
     "SplitResult",
@@ -162,6 +171,7 @@ __all__ = [
     "random_split",
     "run_benchmark",
     "run_experiment",
+    "sample_candidates",
     "save_benchmark_config",
     "save_benchmark_reports",
     "save_encoded_features",
@@ -170,4 +180,4 @@ __all__ = [
     "uniform_exposure",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

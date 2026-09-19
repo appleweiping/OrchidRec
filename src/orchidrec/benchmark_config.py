@@ -22,6 +22,7 @@ from orchidrec.models import (
     SequentialMarkov,
     UserKNN,
 )
+from orchidrec.sampling import SamplingConfig, parse_sampling
 
 BENCHMARK_CONFIG_SCHEMA_VERSION = 1
 BENCHMARK_METRIC_NAMES = ("precision", "recall", "ndcg", "mrr", "coverage", "novelty")
@@ -48,6 +49,7 @@ class BenchmarkEvaluationConfig:
     exclude_seen: bool = True
     bootstrap_samples: int = 1_000
     confidence: float = 0.95
+    sampling: SamplingConfig | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +158,11 @@ class BenchmarkConfig:
                 "exclude_seen": self.evaluation.exclude_seen,
                 "bootstrap_samples": self.evaluation.bootstrap_samples,
                 "confidence": self.evaluation.confidence,
+                **(
+                    {"sampling": self.evaluation.sampling.to_dict()}
+                    if self.evaluation.sampling
+                    else {}
+                ),
             },
             "models": [model.to_dict() for model in self.models],
         }
@@ -477,7 +484,11 @@ def benchmark_config_from_dict(
         raise ConfigurationError("split.test_ratio must be between 0 and 1")
 
     evaluation = _object(root.get("evaluation", {}), "evaluation")
-    _unknown(evaluation, {"k", "exclude_seen", "bootstrap_samples", "confidence"}, "evaluation")
+    _unknown(
+        evaluation,
+        {"k", "exclude_seen", "bootstrap_samples", "confidence", "sampling"},
+        "evaluation",
+    )
     k = _positive_int(evaluation.get("k", 10), "evaluation.k")
     exclude_seen = evaluation.get("exclude_seen", True)
     if not isinstance(exclude_seen, bool):
@@ -488,6 +499,9 @@ def benchmark_config_from_dict(
     confidence = _finite_number(evaluation.get("confidence", 0.95), "evaluation.confidence")
     if not 0.0 < confidence < 1.0:
         raise ConfigurationError("evaluation.confidence must be between 0 and 1")
+    sampling = parse_sampling(evaluation.get("sampling"))
+    if sampling is not None and not exclude_seen:
+        raise ConfigurationError("sampled evaluation requires evaluation.exclude_seen=true")
 
     raw_tuning = root.get("tuning")
     tuning = (
@@ -528,6 +542,7 @@ def benchmark_config_from_dict(
             exclude_seen=exclude_seen,
             bootstrap_samples=bootstrap_samples,
             confidence=confidence,
+            sampling=sampling,
         ),
         models=models,
         tuning=tuning,

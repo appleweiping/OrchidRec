@@ -35,6 +35,8 @@ jobs:
         run: uv run --locked orchidrec demo --output-dir artifacts/ci-demo
       - name: Run EASE experiment smoke test
         run: uv run --locked orchidrec run examples/ease_config.json
+      - name: Run sampled evaluation smoke test
+        run: uv run --locked orchidrec run examples/sampled_config.json
       - name: Run typed feature pipeline smoke test
         run: >-
           uv run --locked orchidrec fit-features
@@ -49,6 +51,12 @@ jobs:
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run shared-split benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/benchmark_config.json --output-dir artifacts/ci-benchmark
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Run sampled shared-split benchmark smoke test
+        run: uv run --locked orchidrec benchmark examples/sampled_benchmark_config.json --output-dir artifacts/ci-sampled-benchmark
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Run sampled tuned benchmark provenance smoke test
+        run: uv run --locked orchidrec benchmark examples/sampled_tuned_benchmark_config.json --output-dir artifacts/ci-sampled-tuned-benchmark
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Install quality tools
         run: uv sync --locked --extra dev

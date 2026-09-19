@@ -214,11 +214,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for model in benchmark_result.models
                 ],
             }
+            if benchmark_result.candidate_plan is not None:
+                summary["evaluation"] = benchmark_result.to_dict()["evaluation"]
             if benchmark_result.tuning is not None:
                 summary["tuning"] = {
                     "selection_metric": benchmark_result.tuning.selection_metric,
                     "direction": benchmark_result.tuning.direction,
                     "three_way_split_sha256": (benchmark_result.tuning.three_way_split_fingerprint),
+                    **(
+                        {
+                            "validation_candidate_sha256": benchmark_result.tuning.validation_candidate_fingerprint
+                        }
+                        if benchmark_result.tuning.validation_candidate_fingerprint is not None
+                        else {}
+                    ),
                     "selected_models": [
                         {
                             "label": model.label,

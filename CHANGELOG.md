@@ -6,6 +6,26 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.8.0] - 2026-09-19
+
+- Added deterministic, bounded uniform and training-popularity negative
+  sampling without replacement, with a public sampler registry and auditable
+  per-user candidate-set fingerprint.
+- Added opt-in sampled evaluation to experiments and shared-split benchmarks,
+  including validation-only tuning. All models on a split share candidates;
+  training history and held-out positives cannot be mislabeled as negatives.
+- Kept full-sort evaluation as the backward-compatible default. Sampled JSON,
+  CSV, HTML, and CLI output explicitly identify the different candidate
+  universe and warn against direct full-sort comparison.
+- Tuned sampled benchmarks separately fingerprint the inner validation and
+  outer test candidate pools, and label every CSV result by its actual pool.
+- Require an explicit seen-history entry for every evaluated user, including
+  an empty set for cold users, so omitted histories cannot leak positives
+  into negative samples.
+- Added hand-computed candidate and no-leakage tests, weighted-sampling
+  frequency checks, resource and malformed-config tests, CLI examples,
+  documentation, and CI smoke runs.
+
 ## [0.7.0] - 2026-09-19
 
 - Added a genuine EASE closed-form recommender over deduplicated binary

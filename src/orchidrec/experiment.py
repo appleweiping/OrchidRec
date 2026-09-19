@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from orchidrec.models import (
     save_model,
 )
 from orchidrec.propensity import popularity_exposure
+from orchidrec.sampling import CandidatePlan, sample_candidates
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
 from orchidrec.unbiased import UnbiasedMetricReport, evaluate_unbiased_ranking
 
@@ -61,6 +63,7 @@ class ExperimentResult:
     metrics: MetricReport
     users: tuple[UserEvaluation, ...]
     unbiased_metrics: UnbiasedMetricReport | None = None
+    candidate_plan: CandidatePlan | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -84,6 +87,15 @@ class ExperimentResult:
         # one keeps exactly the report it produced before.
         if self.unbiased_metrics is not None:
             payload["unbiased_metrics"] = self.unbiased_metrics.to_dict()
+        if self.candidate_plan is not None:
+            payload["evaluation"] = {
+                "mode": "sampled",
+                "sampling": self.candidate_plan.sampling.to_dict(),
+                "candidate_sha256": self.candidate_plan.fingerprint,
+                "candidate_pairs": self.candidate_plan.candidate_pairs,
+                "positive_pairs": self.candidate_plan.positive_pairs,
+                "negative_pairs": self.candidate_plan.negative_pairs,
+            }
         return payload
 
     def save_json(self, path: str | Path) -> None:
@@ -175,12 +187,25 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         raise ConfigurationError("test data contains no items present in the training catalog")
     recommendation_ids: dict[EntityId, list[EntityId]] = {}
     user_rows: list[UserEvaluation] = []
+    candidate_plan = None
+    if config.evaluation.sampling is not None:
+        candidate_plan = sample_candidates(
+            config.evaluation.sampling,
+            seed=config.seed,
+            catalog=model.catalog,
+            train_counts=Counter(event.item_id for event in split.train),
+            relevant=relevant_sets,
+            seen={user: model.seen_items(user) for user in relevant_sets},
+        )
     for user_id in sorted(relevant_sets, key=stable_id_key):
         recommendations = tuple(
             model.recommend(
                 user_id,
                 config.evaluation.k,
                 exclude_seen=config.evaluation.exclude_seen,
+                candidates=(
+                    candidate_plan.candidates[user_id] if candidate_plan is not None else None
+                ),
             )
         )
         recommendation_ids[user_id] = [entry.item_id for entry in recommendations]
@@ -225,6 +250,7 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         metrics=metrics,
         users=tuple(user_rows),
         unbiased_metrics=unbiased_metrics,
+        candidate_plan=candidate_plan,
     )
     if config.output.model_path is not None:
         save_model(model, config.output.model_path)

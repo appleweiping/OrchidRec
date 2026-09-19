@@ -8,6 +8,7 @@ import json
 import math
 import random
 import time
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +26,7 @@ from orchidrec.datasets import DatasetSummary, interaction_fingerprint, load_dat
 from orchidrec.errors import ConfigurationError
 from orchidrec.experiment import build_model
 from orchidrec.metrics import MetricReport, evaluate_ranking
+from orchidrec.sampling import CandidatePlan, sample_candidates
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
 from orchidrec.statistics import (
     BootstrapInterval,
@@ -185,8 +187,18 @@ class BenchmarkTuningResult:
     test_fingerprint: str
     three_way_split_fingerprint: str
     models: tuple[ModelTuningResult, ...]
+    validation_candidate_fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, object]:
+        fingerprints = {
+            "development_sha256": self.development_fingerprint,
+            "training_sha256": self.training_fingerprint,
+            "validation_sha256": self.validation_fingerprint,
+            "test_sha256": self.test_fingerprint,
+            "three_way_split_sha256": self.three_way_split_fingerprint,
+        }
+        if self.validation_candidate_fingerprint is not None:
+            fingerprints["validation_candidate_sha256"] = self.validation_candidate_fingerprint
         return {
             "selection_metric": self.selection_metric,
             "direction": self.direction,
@@ -206,13 +218,7 @@ class BenchmarkTuningResult:
                 "final_fit_seed": self.final_seed,
                 "deterministic_models_are_not_repeated": True,
             },
-            "fingerprints": {
-                "development_sha256": self.development_fingerprint,
-                "training_sha256": self.training_fingerprint,
-                "validation_sha256": self.validation_fingerprint,
-                "test_sha256": self.test_fingerprint,
-                "three_way_split_sha256": self.three_way_split_fingerprint,
-            },
+            "fingerprints": fingerprints,
             "models": [model.to_dict() for model in self.models],
         }
 
@@ -239,6 +245,7 @@ class BenchmarkResult:
     models: tuple[BenchmarkModelResult, ...]
     comparisons: tuple[BenchmarkComparison, ...]
     tuning: BenchmarkTuningResult | None = None
+    candidate_plan: CandidatePlan | None = field(default=None, compare=False, repr=False)
     source_path: Path | None = field(default=None, compare=False, repr=False)
 
     def to_dict(self) -> dict[str, object]:
@@ -271,6 +278,20 @@ class BenchmarkResult:
         }
         if self.tuning is not None:
             payload["tuning"] = self.tuning.to_dict()
+        if self.candidate_plan is not None:
+            evaluation = payload["evaluation"]
+            if not isinstance(evaluation, dict):
+                raise ConfigurationError("malformed evaluation report")
+            evaluation.update(
+                {
+                    "mode": "sampled",
+                    "sampling": self.candidate_plan.sampling.to_dict(),
+                    "candidate_sha256": self.candidate_plan.fingerprint,
+                    "candidate_pairs": self.candidate_plan.candidate_pairs,
+                    "positive_pairs": self.candidate_plan.positive_pairs,
+                    "negative_pairs": self.candidate_plan.negative_pairs,
+                }
+            )
         return payload
 
 
@@ -433,6 +454,7 @@ def _evaluate_model(
     *,
     parameters: Mapping[str, Any] | None = None,
     experiment_seed: int | None = None,
+    candidate_plan: CandidatePlan | None = None,
 ) -> _EvaluatedModel:
     model = build_model(
         spec.name,
@@ -450,6 +472,9 @@ def _evaluate_model(
                 user_id,
                 config.evaluation.k,
                 exclude_seen=config.evaluation.exclude_seen,
+                candidates=(
+                    candidate_plan.candidates[user_id] if candidate_plan is not None else None
+                ),
             )
         )
         for user_id in targets.users
@@ -480,6 +505,26 @@ def _evaluate_model(
         timing=BenchmarkTiming(fit_seconds=fit_seconds, recommend_seconds=recommend_seconds),
         metrics=metrics,
         rows=rows,
+    )
+
+
+def _candidate_plan(
+    config: BenchmarkConfig, split: SplitResult, targets: _TargetSet
+) -> CandidatePlan | None:
+    sampling = config.evaluation.sampling
+    if sampling is None:
+        return None
+    seen_by_user = split.train.by_user()
+    return sample_candidates(
+        sampling,
+        seed=config.seed,
+        catalog=split.train.item_ids,
+        train_counts=Counter(event.item_id for event in split.train),
+        relevant=targets.relevant,
+        seen={
+            user: frozenset(event.item_id for event in seen_by_user.get(user, ()))
+            for user in targets.users
+        },
     )
 
 
@@ -533,6 +578,7 @@ def _tune_model(
     spec: BenchmarkModelSpec,
     validation_split: SplitResult,
     targets: _TargetSet,
+    candidate_plan: CandidatePlan | None,
 ) -> _SelectedModel:
     tuning = config.tuning
     if tuning is None:
@@ -562,6 +608,7 @@ def _tune_model(
                 targets,
                 parameters=trial_parameters,
                 experiment_seed=config.seed if trial_seed is None else trial_seed,
+                candidate_plan=candidate_plan,
             )
             value = _selection_value(evaluated.metrics, tuning.selection_metric)
             if canonical_parameters is None:
@@ -762,13 +809,20 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
                 "validation split must produce non-empty training and validation partitions"
             )
         validation_targets = _targets(validation_split)
+        validation_candidate_plan = _candidate_plan(config, validation_split, validation_targets)
         selected_models = tuple(
-            _tune_model(config, spec, validation_split, validation_targets)
+            _tune_model(
+                config, spec, validation_split, validation_targets, validation_candidate_plan
+            )
             for spec in config.models
         )
     targets = _targets(split)
+    candidate_plan = _candidate_plan(config, split, targets)
     if selected_models is None:
-        evaluated = tuple(_evaluate_model(config, spec, split, targets) for spec in config.models)
+        evaluated = tuple(
+            _evaluate_model(config, spec, split, targets, candidate_plan=candidate_plan)
+            for spec in config.models
+        )
     else:
         evaluated = tuple(
             _evaluate_model(
@@ -778,6 +832,7 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
                 targets,
                 parameters=selected.parameters,
                 experiment_seed=config.seed,
+                candidate_plan=candidate_plan,
             )
             for selected in selected_models
         )
@@ -822,6 +877,11 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
                 split.test,
             ),
             models=tuning_models,
+            validation_candidate_fingerprint=(
+                validation_candidate_plan.fingerprint
+                if validation_candidate_plan is not None
+                else None
+            ),
         )
     model_results, comparisons = _bootstrap(config, evaluated, len(split.train.item_ids))
     return BenchmarkResult(
@@ -843,5 +903,6 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         models=model_results,
         comparisons=comparisons,
         tuning=tuning_result,
+        candidate_plan=candidate_plan,
         source_path=config.data.path,
     )

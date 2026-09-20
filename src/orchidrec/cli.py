@@ -249,6 +249,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "run":
             config = load_config(args.config)
             paths = {"config": args.config, "data.path": config.data.path}
+            if config.data.knowledge_path is not None:
+                paths["data.knowledge_path"] = config.data.knowledge_path
             if config.output.model_path is not None:
                 paths["output.model_path"] = config.output.model_path
             if config.output.report_path is not None:
@@ -295,18 +297,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "benchmark":
             benchmark_config = load_benchmark_config(args.config)
-            require_distinct_paths(
-                {
-                    "config": args.config,
-                    "data.path": benchmark_config.data.path,
-                    "benchmark.json": args.output_dir / "benchmark.json",
-                    "benchmark.csv": args.output_dir / "benchmark.csv",
-                    "benchmark.html": args.output_dir / "benchmark.html",
-                }
-            )
+            benchmark_paths = {
+                "config": args.config,
+                "data.path": benchmark_config.data.path,
+                "benchmark.json": args.output_dir / "benchmark.json",
+                "benchmark.csv": args.output_dir / "benchmark.csv",
+                "benchmark.html": args.output_dir / "benchmark.html",
+            }
+            if benchmark_config.data.knowledge_path is not None:
+                benchmark_paths["data.knowledge_path"] = benchmark_config.data.knowledge_path
+            require_distinct_paths(benchmark_paths)
             benchmark_result = run_benchmark(benchmark_config)
             report_paths = save_benchmark_reports(
-                benchmark_result, args.output_dir, protected_paths={"config": args.config}
+                benchmark_result,
+                args.output_dir,
+                protected_paths={
+                    "config": args.config,
+                    **(
+                        {"data.knowledge_path": benchmark_config.data.knowledge_path}
+                        if benchmark_config.data.knowledge_path is not None
+                        else {}
+                    ),
+                },
             )
             summary: dict[str, object] = {
                 "reports": report_paths.to_dict(),

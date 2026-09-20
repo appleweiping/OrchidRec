@@ -6,6 +6,7 @@ from orchidrec.models.ease import EASE
 from orchidrec.models.implicit_mf import ImplicitMF
 from orchidrec.models.io import load_model, model_from_state, save_model
 from orchidrec.models.item_knn import ItemKNN
+from orchidrec.models.kg_walk_rec import KGWalkRec
 from orchidrec.models.popularity import Popularity
 from orchidrec.models.sequential_backoff import SequentialBackoff
 from orchidrec.models.sequential_markov import SequentialMarkov
@@ -19,6 +20,7 @@ __all__ = [
     "ConfidenceALS",
     "ImplicitMF",
     "ItemKNN",
+    "KGWalkRec",
     "Popularity",
     "Recommendation",
     "SLIMElastic",

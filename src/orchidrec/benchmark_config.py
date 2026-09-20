@@ -18,6 +18,7 @@ from orchidrec.models import (
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
+    KGWalkRec,
     Popularity,
     SequentialBackoff,
     SequentialMarkov,
@@ -37,6 +38,7 @@ class BenchmarkDataConfig:
     path: Path
     format: DatasetFormat
     minimum_rating: float | None = None
+    knowledge_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +152,11 @@ class BenchmarkConfig:
                 "path": str(self.data.path),
                 "format": self.data.format,
                 "minimum_rating": self.data.minimum_rating,
+                **(
+                    {"knowledge_path": str(self.data.knowledge_path)}
+                    if self.data.knowledge_path
+                    else {}
+                ),
             },
             "split": {
                 "method": self.split.method,
@@ -217,6 +224,7 @@ def _validated_model_parameters(
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
         "sequential_backoff": SequentialBackoff,
+        "kg_walk_rec": KGWalkRec,
     }
     validated_params = dict(params)
     if name in {"implicit_mf", "confidence_als"}:
@@ -256,10 +264,11 @@ def _parse_model(
         "user_knn",
         "sequential_markov",
         "sequential_backoff",
+        "kg_walk_rec",
     }:
         raise ConfigurationError(
             f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
-            "ease, slim_elastic, user_knn, sequential_markov, or sequential_backoff"
+            "ease, slim_elastic, user_knn, sequential_markov, sequential_backoff, or kg_walk_rec"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -292,6 +301,7 @@ def _parse_model(
             "popularity_mix",
             "max_interactions",
         },
+        "kg_walk_rec": {"hops", "relation_weights", "weighted", "popularity_mix", "max_work_units"},
     }[name]
     _unknown(params, allowed, f"models[{index}].params")
     _validated_model_parameters(name, params, seed=seed, location=f"models[{index}].params")
@@ -467,7 +477,7 @@ def benchmark_config_from_dict(
     if "data" not in root:
         raise ConfigurationError("benchmark configuration requires a data object")
     data = _object(root["data"], "data")
-    _unknown(data, {"path", "format", "minimum_rating"}, "data")
+    _unknown(data, {"path", "format", "minimum_rating", "knowledge_path"}, "data")
     raw_path = data.get("path")
     if not isinstance(raw_path, str) or not raw_path:
         raise ConfigurationError("data.path must be a non-empty string")
@@ -497,6 +507,15 @@ def benchmark_config_from_dict(
     if not path.is_absolute():
         path = Path(base_dir).resolve() / path
     path = path.resolve()
+    raw_knowledge = data.get("knowledge_path")
+    if raw_knowledge is not None and (not isinstance(raw_knowledge, str) or not raw_knowledge):
+        raise ConfigurationError("data.knowledge_path must be a non-empty string or omitted")
+    knowledge_path = None
+    if raw_knowledge is not None:
+        knowledge_path = Path(raw_knowledge)
+        if not knowledge_path.is_absolute():
+            knowledge_path = Path(base_dir).resolve() / knowledge_path
+        knowledge_path = knowledge_path.resolve()
 
     split = _object(root.get("split", {}), "split")
     _unknown(split, {"method", "test_ratio"}, "split")
@@ -558,12 +577,21 @@ def benchmark_config_from_dict(
         raise ConfigurationError("model labels must be unique")
     if len(models) < 2:
         raise ConfigurationError("a benchmark requires at least two models")
+    if any(model.name == "kg_walk_rec" for model in models) != (knowledge_path is not None):
+        raise ConfigurationError(
+            "data.knowledge_path is required only when benchmarking kg_walk_rec"
+        )
     if tuning is not None and not any(model.grid for model in models):
         raise ConfigurationError("tuning requires at least one model grid")
 
     return BenchmarkConfig(
         seed=seed,
-        data=BenchmarkDataConfig(path=path, format=dataset_format, minimum_rating=minimum_rating),
+        data=BenchmarkDataConfig(
+            path=path,
+            format=dataset_format,
+            minimum_rating=minimum_rating,
+            knowledge_path=knowledge_path,
+        ),
         split=BenchmarkSplitConfig(method=split_method, test_ratio=test_ratio),
         evaluation=BenchmarkEvaluationConfig(
             k=k,

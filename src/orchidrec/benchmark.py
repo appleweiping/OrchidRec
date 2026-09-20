@@ -12,7 +12,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from orchidrec.benchmark_config import (
     BENCHMARK_METRIC_NAMES,
@@ -26,6 +26,8 @@ from orchidrec.datasets import DatasetSummary, interaction_fingerprint, load_dat
 from orchidrec.errors import ConfigurationError
 from orchidrec.experiment import build_model
 from orchidrec.metrics import MetricReport, evaluate_ranking
+from orchidrec.models import KGWalkRec
+from orchidrec.recbole_knowledge import LoadedKnowledgeLinks, load_recbole_knowledge
 from orchidrec.sampling import CandidatePlan, sample_candidates
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
 from orchidrec.statistics import (
@@ -247,6 +249,8 @@ class BenchmarkResult:
     tuning: BenchmarkTuningResult | None = None
     candidate_plan: CandidatePlan | None = field(default=None, compare=False, repr=False)
     source_path: Path | None = field(default=None, compare=False, repr=False)
+    knowledge_path: Path | None = field(default=None, compare=False, repr=False)
+    knowledge: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -292,6 +296,8 @@ class BenchmarkResult:
                     "negative_pairs": self.candidate_plan.negative_pairs,
                 }
             )
+        if self.knowledge is not None:
+            payload["knowledge"] = dict(self.knowledge)
         return payload
 
 
@@ -455,6 +461,7 @@ def _evaluate_model(
     parameters: Mapping[str, Any] | None = None,
     experiment_seed: int | None = None,
     candidate_plan: CandidatePlan | None = None,
+    knowledge: LoadedKnowledgeLinks | None = None,
 ) -> _EvaluatedModel:
     model = build_model(
         spec.name,
@@ -462,7 +469,12 @@ def _evaluate_model(
         experiment_seed=config.seed if experiment_seed is None else experiment_seed,
     )
     fit_started = time.perf_counter_ns()
-    model.fit(split.train)
+    if isinstance(model, KGWalkRec):
+        if knowledge is None:
+            raise ConfigurationError("kg_walk_rec requires a knowledge artifact")
+        model.fit(split.train, knowledge)
+    else:
+        model.fit(split.train)
     fit_seconds = (time.perf_counter_ns() - fit_started) / 1_000_000_000.0
     recommendation_started = time.perf_counter_ns()
     recommendations = {
@@ -579,6 +591,7 @@ def _tune_model(
     validation_split: SplitResult,
     targets: _TargetSet,
     candidate_plan: CandidatePlan | None,
+    knowledge: LoadedKnowledgeLinks | None = None,
 ) -> _SelectedModel:
     tuning = config.tuning
     if tuning is None:
@@ -609,6 +622,7 @@ def _tune_model(
                 parameters=trial_parameters,
                 experiment_seed=config.seed if trial_seed is None else trial_seed,
                 candidate_plan=candidate_plan,
+                knowledge=knowledge,
             )
             value = _selection_value(evaluated.metrics, tuning.selection_metric)
             if canonical_parameters is None:
@@ -662,7 +676,9 @@ def _tune_model(
     )
 
 
-def _semantic_config_fingerprint(config: BenchmarkConfig, data_sha256: str) -> str:
+def _semantic_config_fingerprint(
+    config: BenchmarkConfig, data_sha256: str, knowledge_sha256: str | None = None
+) -> str:
     payload = config.to_dict()
     data = payload["data"]
     if not isinstance(data, dict):
@@ -670,6 +686,9 @@ def _semantic_config_fingerprint(config: BenchmarkConfig, data_sha256: str) -> s
     data = dict(data)
     data.pop("path")
     data["interactions_sha256"] = data_sha256
+    if knowledge_sha256 is not None:
+        data.pop("knowledge_path")
+        data["knowledge_state_sha256"] = knowledge_sha256
     payload["data"] = data
     encoded = json.dumps(
         payload,
@@ -792,6 +811,18 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         format=config.data.format,
         minimum_rating=config.data.minimum_rating,
     )
+    knowledge = (
+        load_recbole_knowledge(config.data.knowledge_path)
+        if config.data.knowledge_path is not None
+        else None
+    )
+    if knowledge is not None and config.data.format == "recbole-inter":
+        for reference in knowledge.references:
+            if reference.kind == "recbole-inter" and (
+                reference.source_sha256 != loaded.summary.source_sha256
+                or reference.normalized_sha256 != loaded.summary.interactions_sha256
+            ):
+                raise ConfigurationError("knowledge artifact references a different .inter source")
     split = _split(config, loaded.dataset)
     if not split.train or not split.test:
         raise ConfigurationError("split must produce non-empty train and test partitions")
@@ -812,7 +843,12 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         validation_candidate_plan = _candidate_plan(config, validation_split, validation_targets)
         selected_models = tuple(
             _tune_model(
-                config, spec, validation_split, validation_targets, validation_candidate_plan
+                config,
+                spec,
+                validation_split,
+                validation_targets,
+                validation_candidate_plan,
+                knowledge=knowledge,
             )
             for spec in config.models
         )
@@ -820,7 +856,9 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
     candidate_plan = _candidate_plan(config, split, targets)
     if selected_models is None:
         evaluated = tuple(
-            _evaluate_model(config, spec, split, targets, candidate_plan=candidate_plan)
+            _evaluate_model(
+                config, spec, split, targets, candidate_plan=candidate_plan, knowledge=knowledge
+            )
             for spec in config.models
         )
     else:
@@ -833,6 +871,7 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
                 parameters=selected.parameters,
                 experiment_seed=config.seed,
                 candidate_plan=candidate_plan,
+                knowledge=knowledge,
             )
             for selected in selected_models
         )
@@ -886,7 +925,11 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
     model_results, comparisons = _bootstrap(config, evaluated, len(split.train.item_ids))
     return BenchmarkResult(
         seed=config.seed,
-        config_fingerprint=_semantic_config_fingerprint(config, loaded.summary.interactions_sha256),
+        config_fingerprint=_semantic_config_fingerprint(
+            config,
+            loaded.summary.interactions_sha256,
+            cast(str, knowledge.to_state()["state_sha256"]) if knowledge is not None else None,
+        ),
         split_fingerprint=_split_fingerprint(split),
         dataset=loaded.summary,
         split_method=config.split.method,
@@ -905,4 +948,18 @@ def run_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
         tuning=tuning_result,
         candidate_plan=candidate_plan,
         source_path=config.data.path,
+        knowledge_path=config.data.knowledge_path,
+        knowledge=(
+            {
+                "fingerprint_sha256": knowledge.fingerprint,
+                "artifact_state_sha256": knowledge.to_state()["state_sha256"],
+                "kg_source_sha256": knowledge.sources[0].sha256,
+                "link_source_sha256": knowledge.sources[1].sha256,
+                "linked_training_items": len(
+                    set(split.train.item_ids) & {row.item_id for row in knowledge.links}
+                ),
+            }
+            if knowledge is not None
+            else None
+        ),
     )

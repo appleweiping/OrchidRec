@@ -58,6 +58,7 @@ from orchidrec.models import (
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
+    KGWalkRec,
     Popularity,
     Recommendation,
     SequentialBackoff,
@@ -180,6 +181,7 @@ __all__ = [
     "InteractionDataset",
     "ItemEntityLink",
     "ItemKNN",
+    "KGWalkRec",
     "KnowledgeLimits",
     "KnowledgeTriple",
     "LoadedDataset",
@@ -256,4 +258,4 @@ __all__ = [
     "verify_atomic_registry",
 ]
 
-__version__ = "0.16.0"
+__version__ = "0.17.0"

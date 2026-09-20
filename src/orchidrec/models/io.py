@@ -22,6 +22,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     from orchidrec.models.ease import EASE
     from orchidrec.models.implicit_mf import ImplicitMF
     from orchidrec.models.item_knn import ItemKNN
+    from orchidrec.models.kg_walk_rec import KGWalkRec
     from orchidrec.models.popularity import Popularity
     from orchidrec.models.sequential_backoff import SequentialBackoff
     from orchidrec.models.sequential_markov import SequentialMarkov
@@ -37,6 +38,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
         ConfidenceALS.model_type: ConfidenceALS,
         EASE.model_type: EASE,
         ItemKNN.model_type: ItemKNN,
+        KGWalkRec.model_type: KGWalkRec,
         ImplicitMF.model_type: ImplicitMF,
         UserKNN.model_type: UserKNN,
         SequentialMarkov.model_type: SequentialMarkov,
@@ -62,6 +64,10 @@ def save_model(model: BaseRecommender, path: str | Path) -> None:
             json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
             + "\n"
         )
+        if len(text.encode("utf-8")) > MAX_MODEL_FILE_BYTES:
+            raise SerializationError(
+                f"model file exceeds the {MAX_MODEL_FILE_BYTES}-byte safety limit"
+            )
         atomic_write_text(destination, text)
     except SerializationError:
         raise

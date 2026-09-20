@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "seed": 2026,
+  "data": {
+    "path": "kg_walk_synthetic.inter",
+    "format": "recbole-inter",
+    "minimum_rating": 1,
+    "knowledge_path": "../artifacts/kg-walk/knowledge.json"
+  },
+  "split": {"method": "leave_one_out", "test_ratio": 0.2},
+  "evaluation": {"k": 2, "exclude_seen": true, "bootstrap_samples": 20, "confidence": 0.9},
+  "models": [
+    {"label": "popularity", "name": "popularity", "params": {}},
+    {"label": "kg-walk", "name": "kg_walk_rec", "params": {"hops": 2, "relation_weights": {"r": 2, "q": 1}}}
+  ]
+}

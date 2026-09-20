@@ -1,0 +1,10 @@
+[
+  {"user_id": "u", "item_id": "A", "value": 1, "timestamp": 1},
+  {"user_id": "u", "item_id": "B", "value": 1, "timestamp": 2},
+  {"user_id": "v", "item_id": "B", "value": 1, "timestamp": 1},
+  {"user_id": "v", "item_id": "C", "value": 1, "timestamp": 2},
+  {"user_id": "w", "item_id": "C", "value": 1, "timestamp": 1},
+  {"user_id": "w", "item_id": "D", "value": 1, "timestamp": 2},
+  {"user_id": "x", "item_id": "D", "value": 1, "timestamp": 1},
+  {"user_id": "x", "item_id": "A", "value": 1, "timestamp": 2}
+]

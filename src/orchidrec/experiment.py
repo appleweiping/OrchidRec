@@ -20,6 +20,7 @@ from orchidrec.models import (
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
+    KGWalkRec,
     Popularity,
     Recommendation,
     SequentialBackoff,
@@ -30,6 +31,7 @@ from orchidrec.models import (
     save_model,
 )
 from orchidrec.propensity import popularity_exposure
+from orchidrec.recbole_knowledge import load_recbole_knowledge
 from orchidrec.sampling import CandidatePlan, sample_candidates
 from orchidrec.split import SplitResult, leave_one_out, random_split, temporal_split
 from orchidrec.unbiased import UnbiasedMetricReport, evaluate_unbiased_ranking
@@ -68,6 +70,7 @@ class ExperimentResult:
     users: tuple[UserEvaluation, ...]
     unbiased_metrics: UnbiasedMetricReport | None = None
     candidate_plan: CandidatePlan | None = None
+    knowledge: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -100,6 +103,8 @@ class ExperimentResult:
                 "positive_pairs": self.candidate_plan.positive_pairs,
                 "negative_pairs": self.candidate_plan.negative_pairs,
             }
+        if self.knowledge is not None:
+            payload["knowledge"] = dict(self.knowledge)
         return payload
 
     def save_json(self, path: str | Path) -> None:
@@ -134,6 +139,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
         "sequential_backoff": SequentialBackoff,
+        "kg_walk_rec": KGWalkRec,
         "side_feature_fm": SideFeatureFM,
     }
     model_class = registry.get(name)
@@ -165,6 +171,8 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     paths = {"data.path": config.data.path}
     if config.data.features_path is not None:
         paths["data.features_path"] = config.data.features_path
+    if config.data.knowledge_path is not None:
+        paths["data.knowledge_path"] = config.data.knowledge_path
     if config.output.model_path is not None:
         paths["output.model_path"] = config.output.model_path
     if config.output.report_path is not None:
@@ -181,6 +189,7 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     if train_pairs & test_pairs:
         raise ConfigurationError("split leaked a user-item pair across train and test")
     model = build_model(config.model.name, config.model.params, experiment_seed=config.seed)
+    knowledge_record: dict[str, object] | None = None
     if isinstance(model, SideFeatureFM):
         if config.data.features_path is None:
             raise ConfigurationError("side_feature_fm requires data.features_path")
@@ -197,9 +206,26 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
             ),
         )
         model.fit(split.train, selected)
+    elif isinstance(model, KGWalkRec):
+        if config.data.knowledge_path is None:
+            raise ConfigurationError("kg_walk_rec requires data.knowledge_path")
+        knowledge = load_recbole_knowledge(config.data.knowledge_path)
+        model.fit(split.train, knowledge)
+        knowledge_record = {
+            "fingerprint_sha256": knowledge.fingerprint,
+            "artifact_state_sha256": knowledge.to_state()["state_sha256"],
+            "kg_source_sha256": knowledge.sources[0].sha256,
+            "link_source_sha256": knowledge.sources[1].sha256,
+            "linked_training_items": len(
+                set(split.train.item_ids) & {row.item_id for row in knowledge.links}
+            ),
+            "work_units": model.work_units,
+        }
     else:
         if config.data.features_path is not None:
             raise ConfigurationError("data.features_path is supported only by side_feature_fm")
+        if config.data.knowledge_path is not None:
+            raise ConfigurationError("data.knowledge_path is supported only by kg_walk_rec")
         model.fit(split.train)
     catalog = set(model.catalog)
     relevant_sets: dict[EntityId, set[EntityId]] = {}
@@ -279,6 +305,7 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         users=tuple(user_rows),
         unbiased_metrics=unbiased_metrics,
         candidate_plan=candidate_plan,
+        knowledge=knowledge_record,
     )
     if config.output.model_path is not None:
         save_model(model, config.output.model_path)

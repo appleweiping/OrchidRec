@@ -359,6 +359,15 @@ def benchmark_html(result: BenchmarkResult) -> str:
 <p><span class="label">Test SHA-256</span><code>{tuning.test_fingerprint}</code></p>
 <p><span class="label">Three-way split SHA-256</span><code>{tuning.three_way_split_fingerprint}</code></p>
 """
+    knowledge_html = ""
+    if result.knowledge is not None:
+        fingerprint = html.escape(str(result.knowledge["fingerprint_sha256"]))
+        state_digest = html.escape(str(result.knowledge["artifact_state_sha256"]))
+        knowledge_html = (
+            f'\n<p><span class="label">Knowledge graph SHA-256</span><code>{fingerprint}</code></p>'
+            f'\n<p><span class="label">Knowledge artifact state SHA-256</span>'
+            f"<code>{state_digest}</code></p>"
+        )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -406,7 +415,7 @@ code {{ overflow-wrap: anywhere; }}
 <p><span class="label">Normalized interactions SHA-256</span><code>{dataset.interactions_sha256}</code></p>
 <p><span class="label">Source bytes SHA-256</span><code>{dataset.source_sha256}</code></p>
 <p><span class="label">Configuration SHA-256</span><code>{result.config_fingerprint}</code></p>
-<p><span class="label">Split SHA-256</span><code>{result.split_fingerprint}</code></p>
+<p><span class="label">Split SHA-256</span><code>{result.split_fingerprint}</code></p>{knowledge_html}
 </body>
 </html>
 """
@@ -431,6 +440,8 @@ def save_benchmark_reports(
     inputs = dict(protected_paths or {})
     if result.source_path is not None:
         inputs["data.path"] = result.source_path
+    if result.knowledge_path is not None:
+        inputs["data.knowledge_path"] = result.knowledge_path
     require_distinct_paths(
         {
             **inputs,

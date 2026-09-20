@@ -394,6 +394,14 @@ new user or unknown last-item transition. See
 [the model guide](docs/sequential-backoff.md) for its exact score, temporal
 evaluation caveat, bounds, and runnable benchmark.
 
+### KGWalkRec
+
+Consumes a checked local `.kg`/`.link` artifact and walks its typed entity
+graph from each user's linked training positives. The bounded relation-aware
+score can be evaluated against non-KG models on one shared split. See
+[the model guide](docs/kg-walk-rec.md) for the hand oracle, provenance limits,
+and runnable import → experiment → benchmark workflow.
+
 ## Top-K behavior
 
 All models share the same ranking implementation:
@@ -626,12 +634,16 @@ values fail early. Supported model parameters are:
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
 | `sequential_backoff` | `weighted`, `backoff_strength`, `popularity_mix`, `max_interactions` |
+| `kg_walk_rec` | `hops`, `relation_weights`, `weighted`, `popularity_mix`, `max_work_units` |
 | `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
 
 When a seeded latent model's `seed` is absent, the experiment-level seed is used.
 `side_feature_fm` additionally requires `data.features_path`; this path is
 invalid for the other models. This model is currently supported by the
 single-model experiment runner, not the shared-split benchmark registry.
+`kg_walk_rec` requires `data.knowledge_path` pointing to an imported,
+checked `.kg`/`.link` artifact; its string item IDs must match the artifact's
+links exactly.
 
 ## CLI
 

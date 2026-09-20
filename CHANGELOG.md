@@ -6,6 +6,18 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.17.0] - 2026-09-20
+
+### Added
+
+- Added a bounded deterministic knowledge-graph walk recommender that consumes
+  local `.kg`/`.link` interchange, uses training-only user seeds, and supports
+  declared relation weights and exact 1–3-hop propagation. Added strict
+  standalone model state, importer-to-experiment and shared benchmark paths,
+  hand-computed probability oracles, path/size guards, source-boundary checks,
+  report digests, and runnable synthetic fixtures. This is not a learned
+  KGCN/CKE/KGAT implementation or whole-comparator parity.
+
 ## [0.16.0] - 2026-09-20
 
 ### Added

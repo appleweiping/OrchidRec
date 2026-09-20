@@ -64,6 +64,19 @@ unknown index without changing fitted state. See the
 [typed feature pipeline guide](docs/features.md) for the schema, provenance,
 resource-limit, and persistence contracts.
 
+## RecBole interaction interchange
+
+For local RecBole `.inter` interaction files, use `--format recbole-inter` with
+an explicit rating threshold when the header has `rating:float`. A runnable
+synthetic fixture and benchmark config are in `examples/`; see the
+[RecBole interchange guide](docs/recbole-inter.md) for its strict schema,
+resource limits, token-ID preservation, and unsupported atomic families.
+
+```bash
+orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4
+orchidrec benchmark examples/recbole-benchmark-config.json --output-dir artifacts/recbole-demo
+```
+
 ## Real MovieLens benchmark
 
 OrchidRec does not download or redistribute MovieLens. Download either

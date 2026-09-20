@@ -158,6 +158,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["retained_interactions"], 17)
         self.assertEqual(len(payload["source_sha256"]), 64)
 
+    def test_dataset_summary_accepts_recbole_inter_with_explicit_threshold(self) -> None:
+        source = FIXTURES / "recbole-inter" / "synthetic.inter"
+        code, stdout, stderr = self.invoke(
+            "dataset-summary", str(source), "--format", "recbole-inter", "--minimum-rating", "3.5"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        payload = json.loads(stdout)
+        self.assertEqual(payload["format"], "recbole-inter")
+        self.assertEqual(payload["source_rows"], 6)
+        self.assertEqual(payload["retained_interactions"], 5)
+        code, stdout, stderr = self.invoke(
+            "dataset-summary", str(source), "--format", "recbole-inter"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("explicit minimum_rating", stderr)
+
     def test_benchmark_command_writes_three_report_formats(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "benchmark-config.json"

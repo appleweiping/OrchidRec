@@ -6,6 +6,23 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.9.0] - 2026-09-19
+
+- Added a strict, bounded adapter for user-supplied RecBole `.inter` atomic
+  interaction files, preserving token IDs including leading zeros and declared
+  rating/timestamp semantics. Rated files require an explicit threshold;
+  unrated files retain unit-valued implicit events without one.
+- Added content-addressed source and normalized-event fingerprints, unambiguous
+  directory lookup, exact tab-field validation, duplicate-pair checks, UTF-8
+  and LF/CRLF handling, physical-row limits, and clear rejection of unsupported
+  columns or bare CR line endings.
+- Integrated the adapter into dataset-summary and benchmark configuration, with
+  pure synthetic examples, independent MovieLens-layout cross-checks,
+  hardlink/path-alias and malformed-input regressions, packaging manifest
+  coverage, and Linux/Windows CLI smoke tests.
+- Scope remains limited to `.inter`; RecBole `.user`, `.item`, `.kg`, `.link`,
+  and `.net` atomic families are not yet supported.
+
 ## [0.8.0] - 2026-09-19
 
 - Added deterministic, bounded uniform and training-popularity negative

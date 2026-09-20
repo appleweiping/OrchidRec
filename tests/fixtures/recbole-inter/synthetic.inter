@@ -1,0 +1,7 @@
+user_id:token	item_id:token	rating:float	timestamp:float
+001	A	5	100
+001	B	4	110
+001	C	1	120
+1	A	4.5	130
+1	B	5	140
+1	C	3.5	150

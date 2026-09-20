@@ -448,10 +448,10 @@ def benchmark_config_from_dict(
     if not isinstance(raw_path, str) or not raw_path:
         raise ConfigurationError("data.path must be a non-empty string")
     raw_format = data.get("format")
-    supported_formats = {"orchidrec-json", "movielens-100k", "movielens-1m"}
+    supported_formats = {"orchidrec-json", "movielens-100k", "movielens-1m", "recbole-inter"}
     if not isinstance(raw_format, str) or raw_format not in supported_formats:
         raise ConfigurationError(
-            "data.format must be orchidrec-json, movielens-100k, or movielens-1m"
+            "data.format must be orchidrec-json, movielens-100k, movielens-1m, or recbole-inter"
         )
     dataset_format = cast(DatasetFormat, raw_format)
     raw_minimum = data.get("minimum_rating")
@@ -459,6 +459,10 @@ def benchmark_config_from_dict(
         if raw_minimum is not None:
             raise ConfigurationError("data.minimum_rating is only valid for MovieLens formats")
         minimum_rating = None
+    elif dataset_format == "recbole-inter":
+        minimum_rating = (
+            None if raw_minimum is None else _finite_number(raw_minimum, "data.minimum_rating")
+        )
     else:
         minimum_rating = (
             4.0 if raw_minimum is None else _finite_number(raw_minimum, "data.minimum_rating")

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "data": {
+    "path": "recbole-synthetic.inter",
+    "format": "recbole-inter",
+    "minimum_rating": 4
+  },
+  "split": {"method": "leave_one_out", "test_ratio": 0.2},
+  "evaluation": {"k": 2, "bootstrap_samples": 20},
+  "models": [
+    {"label": "popularity", "name": "popularity"},
+    {"label": "item-knn", "name": "item_knn", "params": {"neighbors": 2}}
+  ]
+}

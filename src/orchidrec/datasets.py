@@ -19,8 +19,11 @@ from orchidrec._numeric import safe_float
 from orchidrec.data import Interaction, InteractionDataset
 from orchidrec.errors import DatasetError, ValidationError
 
-DatasetFormat = Literal["orchidrec-json", "movielens-100k", "movielens-1m"]
+DatasetFormat = Literal["orchidrec-json", "movielens-100k", "movielens-1m", "recbole-inter"]
 DATASET_SUMMARY_SCHEMA_VERSION = 1
+MAX_RECBOLE_INTER_BYTES = 16 * 1024 * 1024
+MAX_RECBOLE_INTER_ROWS = 100_000
+MAX_RECBOLE_INTER_LINE_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,14 +95,27 @@ def interaction_fingerprint(dataset: InteractionDataset) -> str:
 def _source_file(path: str | Path, dataset_format: DatasetFormat) -> Path:
     source = Path(path)
     if source.is_dir():
-        filename = {
-            "movielens-100k": "u.data",
-            "movielens-1m": "ratings.dat",
-            "orchidrec-json": "interactions.json",
-        }[dataset_format]
-        source = source / filename
+        if dataset_format == "recbole-inter":
+            candidates = sorted(
+                candidate for candidate in source.glob("*.inter") if candidate.is_file()
+            )
+            if len(candidates) != 1:
+                raise DatasetError(
+                    f"dataset directory must contain exactly one .inter file, found "
+                    f"{len(candidates)}: {source}"
+                )
+            source = candidates[0]
+        else:
+            filename = {
+                "movielens-100k": "u.data",
+                "movielens-1m": "ratings.dat",
+                "orchidrec-json": "interactions.json",
+            }[dataset_format]
+            source = source / filename
     if not source.is_file():
         raise DatasetError(f"dataset file does not exist: {source}")
+    if dataset_format == "recbole-inter" and source.suffix != ".inter":
+        raise DatasetError(f"RecBole interaction file must use .inter suffix: {source}")
     return source
 
 
@@ -266,6 +282,168 @@ def load_json_dataset(path: str | Path) -> LoadedDataset:
     )
 
 
+def _read_recbole_inter_source(source: Path) -> tuple[bytes, list[bytes]]:
+    """Enforce byte, physical-row, and line bounds before decoding rows."""
+
+    try:
+        if source.stat().st_size > MAX_RECBOLE_INTER_BYTES:
+            raise DatasetError(f"RecBole .inter file exceeds {MAX_RECBOLE_INTER_BYTES} bytes")
+        with source.open("rb") as stream:
+            payload = stream.read(MAX_RECBOLE_INTER_BYTES + 1)
+    except OSError as exc:
+        raise DatasetError(f"could not read dataset file {source}: {exc}") from exc
+    if len(payload) > MAX_RECBOLE_INTER_BYTES:
+        raise DatasetError(f"RecBole .inter file exceeds {MAX_RECBOLE_INTER_BYTES} bytes")
+    if not payload:
+        raise DatasetError(f"dataset file is empty: {source}")
+    line_count = payload.count(b"\n") + (not payload.endswith(b"\n"))
+    if line_count > MAX_RECBOLE_INTER_ROWS + 1:
+        raise DatasetError(f"RecBole .inter file exceeds {MAX_RECBOLE_INTER_ROWS} data rows")
+    if payload.endswith(b"\r"):
+        raise DatasetError(
+            f"line {line_count}: bare carriage return is not allowed; use LF or CRLF"
+        )
+    start = 0
+    line_number = 1
+    while start < len(payload):
+        end = payload.find(b"\n", start)
+        if end == -1:
+            end = len(payload)
+        if end - start > MAX_RECBOLE_INTER_LINE_BYTES:
+            raise DatasetError(
+                f"line {line_number}: "
+                f"RecBole .inter line exceeds {MAX_RECBOLE_INTER_LINE_BYTES} bytes"
+            )
+        start = end + 1
+        line_number += 1
+    lines = payload.split(b"\n")
+    if lines[-1] == b"":
+        lines.pop()
+    return payload, lines
+
+
+def _recbole_inter_header(raw: str) -> tuple[str, ...]:
+    columns = tuple(raw.split("\t"))
+    permitted = {"user_id:token", "item_id:token", "rating:float", "timestamp:float"}
+    if len(set(columns)) != len(columns):
+        raise DatasetError("line 1: duplicate RecBole .inter columns")
+    for column in columns:
+        if column not in permitted:
+            raise DatasetError(f"line 1: unsupported RecBole .inter column {column!r}")
+    if "user_id:token" not in columns or "item_id:token" not in columns:
+        raise DatasetError("line 1: required user_id:token and item_id:token columns are missing")
+    return columns
+
+
+def _recbole_inter_number(raw: str, name: str, line_number: int) -> float:
+    if not raw:
+        raise DatasetError(f"line {line_number}: {name} must be a finite number")
+    try:
+        number = float(raw)
+    except (ValueError, OverflowError) as exc:
+        raise DatasetError(f"line {line_number}: {name} must be a finite number") from exc
+    if not math.isfinite(number):
+        raise DatasetError(f"line {line_number}: {name} must be a finite number")
+    return number
+
+
+def load_recbole_inter(
+    path: str | Path, *, minimum_rating: int | float | None = None
+) -> LoadedDataset:
+    """Adapt one local RecBole `.inter` interaction file to implicit events.
+
+    Rated files require an explicitly declared threshold. Unrated files reject
+    a threshold and retain each interaction as a unit-valued implicit event.
+    Only the four declared fields with direct OrchidRec semantics are accepted.
+    """
+
+    source = _source_file(path, "recbole-inter")
+    payload, raw_lines = _read_recbole_inter_source(source)
+    try:
+        lines: list[str] = []
+        for line_number, raw_line in enumerate(raw_lines, start=1):
+            normalized_bytes = raw_line.removesuffix(b"\r")
+            if b"\r" in normalized_bytes:
+                raise DatasetError(
+                    f"line {line_number}: bare carriage return is not allowed; use LF or CRLF"
+                )
+            lines.append(normalized_bytes.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise DatasetError("RecBole .inter file must contain UTF-8 text") from exc
+    columns = _recbole_inter_header(lines[0])
+    rated = "rating:float" in columns
+    if rated:
+        if minimum_rating is None:
+            raise DatasetError("rated RecBole .inter file requires explicit minimum_rating")
+        if isinstance(minimum_rating, bool) or not isinstance(minimum_rating, (int, float)):
+            raise DatasetError("minimum_rating must be a finite number")
+        threshold = safe_float(minimum_rating)
+        if not math.isfinite(threshold):
+            raise DatasetError("minimum_rating must be a finite number")
+    else:
+        if minimum_rating is not None:
+            raise DatasetError("minimum_rating requires a rating:float column")
+        threshold = None
+    if len(lines) == 1:
+        raise DatasetError("RecBole .inter file contains no data rows")
+    retained: list[Interaction] = []
+    pairs: set[tuple[str, str]] = set()
+    ratings: list[float] = []
+    timestamps: list[float] = []
+    for line_number, line in enumerate(lines[1:], start=2):
+        if not line:
+            raise DatasetError(f"line {line_number}: blank rows are not allowed")
+        fields = line.split("\t")
+        if len(fields) != len(columns):
+            raise DatasetError(
+                f"line {line_number}: expected {len(columns)} tab-separated fields, got {len(fields)}"
+            )
+        row = dict(zip(columns, fields, strict=True))
+        user_id, item_id = row["user_id:token"], row["item_id:token"]
+        if not user_id.strip() or not item_id.strip():
+            raise DatasetError(f"line {line_number}: user and item token IDs must not be empty")
+        pair = (user_id, item_id)
+        if pair in pairs:
+            raise DatasetError(f"line {line_number}: duplicate user-item event {pair!r}")
+        pairs.add(pair)
+        rating = None
+        if rated:
+            rating = _recbole_inter_number(row["rating:float"], "rating", line_number)
+            ratings.append(rating)
+        timestamp = None
+        if "timestamp:float" in columns:
+            timestamp = _recbole_inter_number(row["timestamp:float"], "timestamp", line_number)
+            if timestamp < 0:
+                raise DatasetError(f"line {line_number}: timestamp must be non-negative")
+            timestamps.append(timestamp)
+        if threshold is None or (rating is not None and rating >= threshold):
+            retained.append(Interaction(user_id, item_id, 1.0, timestamp))
+    if not retained:
+        raise DatasetError("minimum_rating removed every interaction")
+    dataset = InteractionDataset(retained)
+    source_digest = hashlib.sha256(payload).hexdigest()
+    return LoadedDataset(
+        dataset=dataset,
+        summary=DatasetSummary(
+            format="recbole-inter",
+            source_name=f"sha256-{source_digest}.inter",
+            source_sha256=source_digest,
+            interactions_sha256=interaction_fingerprint(dataset),
+            source_bytes=len(payload),
+            source_rows=len(lines) - 1,
+            retained_interactions=len(dataset),
+            dropped_interactions=len(lines) - 1 - len(dataset),
+            users=len(dataset.user_ids),
+            items=len(dataset.item_ids),
+            minimum_rating=threshold,
+            rating_min=min(ratings) if ratings else 1.0,
+            rating_max=max(ratings) if ratings else 1.0,
+            timestamp_min=min(timestamps) if timestamps else None,
+            timestamp_max=max(timestamps) if timestamps else None,
+        ),
+    )
+
+
 def load_dataset(
     path: str | Path,
     *,
@@ -280,4 +458,6 @@ def load_dataset(
         return load_json_dataset(path)
     if format in {"movielens-100k", "movielens-1m"}:
         return load_movielens(path, format=format, minimum_rating=minimum_rating)
+    if format == "recbole-inter":
+        return load_recbole_inter(path, minimum_rating=minimum_rating)
     raise DatasetError(f"unsupported dataset format: {format!r}")

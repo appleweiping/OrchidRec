@@ -65,7 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     dataset_summary.add_argument(
         "--format",
         required=True,
-        choices=("orchidrec-json", "movielens-100k", "movielens-1m"),
+        choices=("orchidrec-json", "movielens-100k", "movielens-1m", "recbole-inter"),
     )
     dataset_summary.add_argument("--minimum-rating", type=float)
 

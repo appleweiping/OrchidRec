@@ -11,7 +11,7 @@ runtime dependencies outside the Python standard library**.
 
 It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
-deterministic ID mapping, three train/test split strategies, seven
+deterministic ID mapping, three train/test split strategies, eight
 recommenders, six ranking metrics, user bootstrap intervals, paired model
 comparisons, opt-in uniform/popularity sampled candidate evaluation,
 leakage-safe typed feature preprocessing, portable JSON state,
@@ -33,6 +33,7 @@ example instead:
 ```bash
 orchidrec run examples/config.json
 orchidrec run examples/ease_config.json
+orchidrec run examples/slim_elastic_config.json
 orchidrec run examples/sampled_config.json
 ```
 
@@ -180,7 +181,7 @@ flowchart LR
     N -->|inner split| O[Training / validation]
     O -->|select only on validation| F[Selected parameters]
     N -->|disabled| F
-    F -->|Popularity / ItemKNN / UserKNN / BPR-MF / confidence ALS / EASE / Markov| P[Refit on development]
+    F -->|Popularity / KNN / BPR-MF / confidence ALS / EASE / SLIM / Markov| P[Refit on development]
     P -->|one final test evaluation| G[Candidate scores]
     G --> H[Seen-item filter and stable Top-K]
     H --> I[Precision Recall NDCG MRR]
@@ -241,7 +242,8 @@ optional fields:
 | `timestamp` | finite number or `null` | Ordering value used by temporal splits. |
 
 Unknown fields are rejected. Repeated user-item events are allowed: Popularity,
-ItemKNN, and UserKNN aggregate their values, while ImplicitMF and EASE treat the
+ItemKNN, and UserKNN aggregate their values, while ImplicitMF, EASE, and
+SLIMElastic treat the
 pair as one binary positive preference. ConfidenceALS sums repeated values into
 one declared confidence before solving. SequentialMarkov consumes every
 timestamped event in chronological order and may therefore retain repeated
@@ -344,6 +346,18 @@ The standard-library implementation is intentionally bounded to at most 512
 items; it is a correctness-oriented baseline, not a large-catalog solver. See
 the [EASE model contract](docs/ease.md) for its equations, persisted invariants,
 resource policy, and reproducibility boundary.
+
+### SLIM Elastic-Net
+
+Fits a nonnegative, zero-diagonal sparse linear item-item model to binary
+user histories, with explicit L1 and L2 penalties. Bounded cyclic coordinate
+descent checks a normalized KKT residual for every target item and fails when
+the configured sweep budget cannot meet tolerance. Known-user scores sum
+outgoing coefficients from their history; unknown users use weighted
+popularity. The model supports the same strict experiment, benchmark, and
+versioned JSON persistence paths as the other built-ins. It is a small-catalog
+CPU correctness baseline, not the complete RecBole model family or a
+large-scale sparse solver. See the [SLIM model contract](docs/slim-elastic.md).
 
 Experiment and benchmark commands reject report/model paths that alias an input
 dataset, configuration, or each other, including through hard links or symbolic
@@ -543,7 +557,7 @@ accepts `maximize` or `minimize` and defaults to `maximize` when omitted.
 As with the outer split, `validation_ratio` is validated but ignored by
 `leave_one_out`.
 
-Popularity, ItemKNN, UserKNN, EASE, and SequentialMarkov are deterministic and
+Popularity, ItemKNN, UserKNN, EASE, SLIMElastic, and SequentialMarkov are deterministic and
 therefore run once per candidate.
 ImplicitMF and ConfidenceALS run every candidate once for each distinct
 `implicit_mf_seeds` value and selection uses the arithmetic mean of that
@@ -594,6 +608,7 @@ values fail early. Supported model parameters are:
 | `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed` |
 | `confidence_als` | `factors`, `epochs`, `alpha`, `regularization`, `seed` |
 | `ease` | `regularization`, `max_items`, `max_interactions`, `max_work_units` |
+| `slim_elastic` | `l1`, `l2`, `max_sweeps`, `tolerance`, `max_items`, `max_interactions`, `max_work_units` |
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
 
@@ -703,8 +718,9 @@ fields. Neither runner changes Python's process-global random state.
   from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration, UserKNN builds pairwise user
   similarities, SequentialMarkov holds a sparse transition table, ImplicitMF
-  uses simple SGD, ConfidenceALS solves many small systems, and EASE performs a
-  dense cubic factorization in pure Python rather than optimized native kernels.
+  uses simple SGD, ConfidenceALS solves many small systems, EASE performs a
+  dense cubic factorization, and SLIMElastic uses bounded dense coordinate
+  descent in pure Python rather than optimized native kernels.
   Full MovieLens 1M runs can
   therefore be slow.
 - Typed feature preprocessing is in memory and produces standalone encoded
@@ -756,6 +772,9 @@ determinism, resource, and cold-start tests.
 EASE adds a hand-computed closed-form coefficient oracle, an independent
 matrix-inverse oracle, persisted diagnostic invariants, order/duplicate
 semantics, resource-boundary tests, and experiment/benchmark round trips.
+SLIMElastic adds a two-item closed form, a coupled three-item rational oracle,
+KKT and nonconvergence checks, binary-duplicate semantics, and strict model
+round trips.
 The feature pipeline adds hand-computed vocabulary and normalization oracles,
 unseen-token and sequence semantics, extreme finite values, order invariance,
 strict checksum and schema tamper cases, bounded streaming persistence,

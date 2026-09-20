@@ -24,6 +24,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     from orchidrec.models.item_knn import ItemKNN
     from orchidrec.models.popularity import Popularity
     from orchidrec.models.sequential_markov import SequentialMarkov
+    from orchidrec.models.slim_elastic import SLIMElastic
     from orchidrec.models.user_knn import UserKNN
 
     if not isinstance(state, Mapping):
@@ -37,6 +38,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
         ImplicitMF.model_type: ImplicitMF,
         UserKNN.model_type: UserKNN,
         SequentialMarkov.model_type: SequentialMarkov,
+        SLIMElastic.model_type: SLIMElastic,
     }
     model_class = registry.get(model_type) if isinstance(model_type, str) else None
     if model_class is None:

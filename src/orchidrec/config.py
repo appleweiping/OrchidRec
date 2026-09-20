@@ -177,6 +177,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "popularity",
         "confidence_als",
         "ease",
+        "slim_elastic",
         "item_knn",
         "implicit_mf",
         "user_knn",
@@ -184,7 +185,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     }:
         raise ConfigurationError(
             "model.name must be popularity, item_knn, implicit_mf, confidence_als, ease, "
-            "user_knn, or sequential_markov"
+            "slim_elastic, user_knn, or sequential_markov"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -200,6 +201,15 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
         "ease": {"regularization", "max_items", "max_interactions", "max_work_units"},
+        "slim_elastic": {
+            "l1",
+            "l2",
+            "max_sweeps",
+            "tolerance",
+            "max_items",
+            "max_interactions",
+            "max_work_units",
+        },
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }
@@ -211,6 +221,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         ItemKNN,
         Popularity,
         SequentialMarkov,
+        SLIMElastic,
         UserKNN,
     )
 
@@ -218,6 +229,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,
+        "slim_elastic": SLIMElastic,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,

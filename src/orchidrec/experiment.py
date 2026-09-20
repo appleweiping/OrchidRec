@@ -22,6 +22,7 @@ from orchidrec.models import (
     Popularity,
     Recommendation,
     SequentialMarkov,
+    SLIMElastic,
     UserKNN,
     save_model,
 )
@@ -124,6 +125,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,
+        "slim_elastic": SLIMElastic,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,

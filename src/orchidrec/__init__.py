@@ -61,6 +61,7 @@ from orchidrec.models import (
     Popularity,
     Recommendation,
     SequentialMarkov,
+    SLIMElastic,
     UserKNN,
 )
 from orchidrec.propensity import (
@@ -197,6 +198,7 @@ __all__ = [
     "Recommendation",
     "RegisteredAtomicDataset",
     "RegistryLimits",
+    "SLIMElastic",
     "SamplingConfig",
     "SequenceKeep",
     "SequentialMarkov",
@@ -250,4 +252,4 @@ __all__ = [
     "verify_atomic_registry",
 ]
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"

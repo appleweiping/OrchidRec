@@ -20,6 +20,7 @@ from orchidrec.models import (
     ItemKNN,
     Popularity,
     SequentialMarkov,
+    SLIMElastic,
     UserKNN,
 )
 from orchidrec.sampling import SamplingConfig, parse_sampling
@@ -209,6 +210,7 @@ def _validated_model_parameters(
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,
+        "slim_elastic": SLIMElastic,
         "item_knn": ItemKNN,
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
@@ -248,12 +250,13 @@ def _parse_model(
         "implicit_mf",
         "confidence_als",
         "ease",
+        "slim_elastic",
         "user_knn",
         "sequential_markov",
     }:
         raise ConfigurationError(
             f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
-            "ease, user_knn, or sequential_markov"
+            "ease, slim_elastic, user_knn, or sequential_markov"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -269,6 +272,15 @@ def _parse_model(
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
         "ease": {"regularization", "max_items", "max_interactions", "max_work_units"},
+        "slim_elastic": {
+            "l1",
+            "l2",
+            "max_sweeps",
+            "tolerance",
+            "max_items",
+            "max_interactions",
+            "max_work_units",
+        },
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
     }[name]
@@ -341,6 +353,9 @@ def _parse_model(
             ("confidence_als", "regularization"),
             ("user_knn", "shrinkage"),
             ("sequential_markov", "popularity_mix"),
+            ("slim_elastic", "l1"),
+            ("slim_elastic", "l2"),
+            ("slim_elastic", "tolerance"),
         }
         for parameter, values in grid.items():
             semantic_values = [

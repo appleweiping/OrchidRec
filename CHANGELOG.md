@@ -6,6 +6,16 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.14.0] - 2026-09-20
+
+### Added
+
+- Added a bounded deterministic nonnegative SLIM Elastic-Net item-item model
+  with checked cyclic coordinate descent, strict canonical persistence,
+  experiment/benchmark configuration, synthetic example, and hand-solved
+  numerical regression tests. This is one compact-catalog model, not full
+  RecBole model-stack parity.
+
 ## [0.13.0] - 2026-09-19
 
 ### Added

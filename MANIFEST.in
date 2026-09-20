@@ -2,6 +2,6 @@ include CONTRIBUTING.md
 include CHANGELOG.md
 include SECURITY.md
 recursive-include docs *.md
-recursive-include examples *.json *.py *.inter *.user *.item *.kg *.link
+recursive-include examples *.json *.py *.inter *.user *.item *.kg *.link *.net
 recursive-include tests/fixtures *.data *.dat *.inter *.md
 recursive-include tools *.py

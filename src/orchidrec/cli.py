@@ -32,6 +32,7 @@ from orchidrec.recbole_knowledge import (
     import_recbole_knowledge,
     save_recbole_knowledge,
 )
+from orchidrec.recbole_network import NetworkLimits, import_recbole_network, save_recbole_network
 from orchidrec.recbole_side import (
     RecBoleSideLimits,
     import_recbole_side_features,
@@ -102,6 +103,16 @@ def _parser() -> argparse.ArgumentParser:
     knowledge.add_argument("--output", type=Path, required=True)
     for name, default in KnowledgeLimits().to_state().items():
         knowledge.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
+
+    network = subparsers.add_parser(
+        "import-recbole-network", help="import a local directed .net social edge table"
+    )
+    network.add_argument("--net", type=Path, required=True)
+    network.add_argument("--inter", type=Path)
+    network.add_argument("--minimum-rating", type=float)
+    network.add_argument("--output", type=Path, required=True)
+    for name, default in NetworkLimits().to_state().items():
+        network.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
 
     fit_features = subparsers.add_parser(
         "fit-features",
@@ -371,6 +382,41 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "linked_entities_in_kg": graph.linked_entities_in_kg,
                         "references": [reference.to_state() for reference in graph.references],
                         "sources": [source.to_state() for source in graph.sources],
+                        "output": str(args.output),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.command == "import-recbole-network":
+            _require_distinct_paths(
+                {
+                    "net": args.net,
+                    **({"inter": args.inter} if args.inter is not None else {}),
+                    "output": args.output,
+                }
+            )
+            network_limits = NetworkLimits(
+                **{name: getattr(args, name) for name in NetworkLimits().to_state()}
+            )
+            network = import_recbole_network(
+                net_path=args.net,
+                inter_path=args.inter,
+                minimum_rating=args.minimum_rating,
+                limits=network_limits,
+            )
+            save_recbole_network(network, args.output)
+            print(
+                json.dumps(
+                    {
+                        "fingerprint_sha256": network.fingerprint,
+                        "edges": len(network.edges),
+                        "users": len(network.users),
+                        "source": network.source.to_state(),
+                        "reference": (
+                            network.reference.to_state() if network.reference is not None else None
+                        ),
                         "output": str(args.output),
                     },
                     indent=2,

@@ -1,0 +1,6 @@
+source_id:token	target_id:token
+001	1
+1	001
+1	u3
+u3	u3
+u4	001

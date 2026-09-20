@@ -5,7 +5,8 @@ and item tables into its own typed `FeatureDataset`. This is a strict interchang
 adapter, not the RecBole dataset registry. It does not download or redistribute
 datasets and does not implement interaction joins or a feature-aware
 recommender. A separate [`.kg` / `.link` adapter](recbole-knowledge.md)
-preserves knowledge bindings; `.net` remains unsupported.
+preserves knowledge bindings. A separate [`.net` adapter](recbole-network.md)
+preserves directed social edges without graph-model training.
 
 ```bash
 orchidrec import-recbole-features \

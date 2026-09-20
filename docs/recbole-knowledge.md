@@ -75,7 +75,6 @@ normalized fingerprint. Checksums detect accidental corruption, not
 malicious provenance forgery. Publication is same-directory atomic and
 no-overwrite; an existing output or path alias is never replaced.
 
-`.net` is still unsupported: the frozen RecBole source identifies its social
-`source`/`target` role but does not establish a concrete header/type contract
-we can validate without guessing. This artifact must not be described as
-full RecBole knowledge-aware or social recommendation compatibility.
+The separate [`.net` edge guide](recbole-network.md) describes a narrow local
+social-graph snapshot. Neither adapter provides a social or knowledge-aware
+model, graph splitting, or the full RecBole data registry.

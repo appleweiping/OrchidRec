@@ -6,6 +6,16 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.12.0] - 2026-09-19
+
+### Added
+
+- Bounded local directed `.net` source/target graph interchange with optional
+  `.inter` user-overlap audit, exact source-byte and normalized-edge hashes,
+  atomic no-overwrite artifacts, and strict CLI/package regressions.
+- This is an OrchidRec-specific social-edge interchange, not a social
+  recommender, graph-training model, or full RecBole dataset registry.
+
 ## [0.11.0] - 2026-09-19
 
 ### Added

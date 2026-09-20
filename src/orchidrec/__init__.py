@@ -81,6 +81,16 @@ from orchidrec.recbole_knowledge import (
     load_recbole_knowledge,
     save_recbole_knowledge,
 )
+from orchidrec.recbole_network import (
+    LoadedSocialNetwork,
+    NetworkCatalogReference,
+    NetworkLimits,
+    NetworkSource,
+    SocialEdge,
+    import_recbole_network,
+    load_recbole_network,
+    save_recbole_network,
+)
 from orchidrec.recbole_side import (
     LoadedRecBoleSideFeatures,
     RecBoleSideLimits,
@@ -159,8 +169,12 @@ __all__ = [
     "LoadedDataset",
     "LoadedKnowledgeLinks",
     "LoadedRecBoleSideFeatures",
+    "LoadedSocialNetwork",
     "MetricReport",
     "ModelTuningResult",
+    "NetworkCatalogReference",
+    "NetworkLimits",
+    "NetworkSource",
     "NumericStatistics",
     "PairedBootstrapResult",
     "Popularity",
@@ -169,6 +183,7 @@ __all__ = [
     "SamplingConfig",
     "SequenceKeep",
     "SequentialMarkov",
+    "SocialEdge",
     "SplitResult",
     "StableIdMap",
     "TuningCandidateResult",
@@ -181,6 +196,7 @@ __all__ = [
     "evaluate_unbiased_ranking",
     "feature_dataset_sha256",
     "import_recbole_knowledge",
+    "import_recbole_network",
     "import_recbole_side_features",
     "interaction_fingerprint",
     "interval_from_draws",
@@ -194,6 +210,7 @@ __all__ = [
     "load_feature_dataset",
     "load_movielens",
     "load_recbole_knowledge",
+    "load_recbole_network",
     "load_recbole_side_features",
     "paired_bootstrap_mean",
     "paired_comparison_from_draws",
@@ -207,9 +224,10 @@ __all__ = [
     "save_encoded_features",
     "save_feature_dataset",
     "save_recbole_knowledge",
+    "save_recbole_network",
     "save_recbole_side_features",
     "temporal_split",
     "uniform_exposure",
 ]
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"

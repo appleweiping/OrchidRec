@@ -76,7 +76,9 @@ the typed-feature importer.
 
 A [`.kg` / `.link` knowledge guide](docs/recbole-knowledge.md) describes the
 separate local triplet/item-link artifact and its optional read-only catalog
-overlap. It does not add knowledge-aware training or `.net` support.
+overlap. The [`.net` edge guide](docs/recbole-network.md) documents a separate
+strict directed-edge snapshot and optional `.inter` user overlap. Neither
+adapter adds a social or knowledge-aware model or the full RecBole registry.
 
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4

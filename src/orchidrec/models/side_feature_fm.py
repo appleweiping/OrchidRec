@@ -22,6 +22,7 @@ from orchidrec.features import (
     FittedFeaturePipeline,
 )
 from orchidrec.models.base import BaseRecommender, make_envelope, parse_envelope
+from orchidrec.training_sampling import TrainingNegativeSampler, validate_training_sampling
 
 MAX_USERS = 2_048
 MAX_ITEMS = 2_048
@@ -95,6 +96,8 @@ class SideFeatureFM(BaseRecommender):
         regularization: float = 0.001,
         seed: int = 42,
         max_work_units: int = MAX_WORK,
+        negative_strategy: str = "uniform",
+        popularity_alpha: float = 1.0,
     ) -> None:
         super().__init__()
         self.factors = _integer(factors, "factors", MAX_FACTORS)
@@ -105,6 +108,9 @@ class SideFeatureFM(BaseRecommender):
             raise ValidationError("seed must be a signed 64-bit integer")
         self.seed = seed
         self.max_work_units = _integer(max_work_units, "max_work_units", MAX_WORK)
+        self.negative_strategy, self.popularity_alpha = validate_training_sampling(
+            negative_strategy, popularity_alpha
+        )
         self._pipeline: FittedFeaturePipeline | None = None
         self._encoded: EncodedFeatureDataset | None = None
         self._user_vectors: dict[EntityId, Sparse] = {}
@@ -149,18 +155,31 @@ class SideFeatureFM(BaseRecommender):
         actual = {(row.source, row.key) for row in features}
         if actual != expected:
             raise ValidationError("feature rows must exactly match training user/item entities")
-        pipeline = FittedFeaturePipeline.fit(features)
-        encoded = pipeline.transform(features)
-        self._fitted = False
-        self._pipeline = pipeline
-        self._encoded = encoded
-        self._prepare_vectors(dataset.user_ids, dataset.item_ids, encoded, pipeline)
         positives = {(event.user_id, event.item_id) for event in dataset}
         positive_by_user: dict[EntityId, set[EntityId]] = {
             user_id: set() for user_id in dataset.user_ids
         }
         for user, item in positives:
             positive_by_user[user].add(item)
+        sampler = (
+            TrainingNegativeSampler(
+                dataset,
+                seen={user: frozenset(items) for user, items in positive_by_user.items()},
+                catalog=dataset.item_ids,
+                strategy=self.negative_strategy,
+                alpha=self.popularity_alpha,
+                epochs=self.epochs,
+                draws_per_positive=1,
+            )
+            if self.negative_strategy == "popularity"
+            else None
+        )
+        pipeline = FittedFeaturePipeline.fit(features)
+        encoded = pipeline.transform(features)
+        self._fitted = False
+        self._pipeline = pipeline
+        self._encoded = encoded
+        self._prepare_vectors(dataset.user_ids, dataset.item_ids, encoded, pipeline)
         negative_users = sum(
             len(seen) < len(dataset.item_ids) for seen in positive_by_user.values()
         )
@@ -192,7 +211,12 @@ class SideFeatureFM(BaseRecommender):
                 for user, positive in pairs:
                     available = negative[user]
                     if available:
-                        self._update_pair(user, positive, available[rng.randrange(len(available))])
+                        selected = (
+                            available[rng.randrange(len(available))]
+                            if sampler is None
+                            else sampler.sample(user, rng)
+                        )
+                        self._update_pair(user, positive, selected)
                         self._updates += 1
             if not self._updates:
                 raise ValidationError("no BPR updates were possible")
@@ -386,6 +410,14 @@ class SideFeatureFM(BaseRecommender):
                 "regularization": self.regularization,
                 "seed": self.seed,
                 "max_work_units": self.max_work_units,
+                **(
+                    {
+                        "negative_strategy": self.negative_strategy,
+                        "popularity_alpha": self.popularity_alpha,
+                    }
+                    if self.negative_strategy == "popularity"
+                    else {}
+                ),
             },
             self._base_state(),
             {
@@ -409,12 +441,20 @@ class SideFeatureFM(BaseRecommender):
             "seed",
             "max_work_units",
         }
-        if set(parameters) != expected_parameters:
+        if set(parameters) not in (
+            expected_parameters,
+            expected_parameters | {"negative_strategy", "popularity_alpha"},
+        ):
             raise SerializationError("FM parameters are malformed")
         if set(model) != {"pipeline", "encoded", "encoded_sha256", "linear", "latent", "updates"}:
             raise SerializationError("FM model fields are malformed")
         try:
             instance = cls(**parameters)
+            if (
+                set(parameters) != expected_parameters
+                and instance.negative_strategy != "popularity"
+            ):
+                raise SerializationError("FM augmented sampler state must use popularity")
             if type(base.get("catalog")) is not list or len(base["catalog"]) > MAX_ITEMS:
                 raise SerializationError("FM catalog limit exceeded")
             if type(base.get("users")) is not list or len(base["users"]) > MAX_USERS:

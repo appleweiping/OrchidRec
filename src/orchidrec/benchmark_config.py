@@ -284,6 +284,8 @@ def _parse_model(
             "learning_rate",
             "regularization",
             "negative_samples",
+            "negative_strategy",
+            "popularity_alpha",
             "seed",
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
@@ -314,6 +316,8 @@ def _parse_model(
             "regularization",
             "seed",
             "max_work_units",
+            "negative_strategy",
+            "popularity_alpha",
         },
     }[name]
     _unknown(params, allowed, f"models[{index}].params")

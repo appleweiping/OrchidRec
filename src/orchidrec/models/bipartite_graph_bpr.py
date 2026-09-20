@@ -15,6 +15,7 @@ from orchidrec._numeric import safe_float
 from orchidrec.data import EntityId, InteractionDataset, stable_id_key, validate_entity_id
 from orchidrec.errors import SerializationError, ValidationError
 from orchidrec.models.base import BaseRecommender, make_envelope, parse_envelope
+from orchidrec.training_sampling import TrainingNegativeSampler, validate_training_sampling
 
 MAX_USERS = 256
 MAX_ITEMS = 256
@@ -178,6 +179,8 @@ class BipartiteGraphBPR(BaseRecommender):
         regularization: float = 0.001,
         seed: int = 42,
         max_work_units: int = MAX_WORK,
+        negative_strategy: str = "uniform",
+        popularity_alpha: float = 1.0,
     ) -> None:
         super().__init__()
         for name, value, maximum in (
@@ -197,6 +200,9 @@ class BipartiteGraphBPR(BaseRecommender):
         self.regularization = _real(regularization, "regularization", positive=False)
         self.seed = seed
         self.max_work_units = max_work_units
+        self.negative_strategy, self.popularity_alpha = validate_training_sampling(
+            negative_strategy, popularity_alpha
+        )
         self._users: tuple[EntityId, ...] = ()
         self._edges: tuple[Edge, ...] = ()
         self._ego: Matrix = []
@@ -252,9 +258,22 @@ class BipartiteGraphBPR(BaseRecommender):
         return super().fit(dataset)
 
     def _fit_model(self, dataset: InteractionDataset) -> None:
-        del dataset
         self._users = tuple(sorted(self._seen, key=stable_id_key))
         self._edges = _edges(self._users, self._catalog, self._seen)
+        sampler = (
+            TrainingNegativeSampler(
+                dataset,
+                seen=self._seen,
+                catalog=self._catalog,
+                strategy=self.negative_strategy,
+                alpha=self.popularity_alpha,
+                epochs=self.epochs,
+                draws_per_positive=1,
+            )
+            if self.negative_strategy == "popularity"
+            else None
+        )
+        item_index = {item: len(self._users) + offset for offset, item in enumerate(self._catalog)}
         negative_pools = {
             user_index: tuple(
                 len(self._users) + item_index
@@ -272,7 +291,13 @@ class BipartiteGraphBPR(BaseRecommender):
         history: list[float] = []
         for _ in range(self.epochs):
             pairs = tuple(
-                (user, positive, negative_pools[user][rng.randrange(len(negative_pools[user]))])
+                (
+                    user,
+                    positive,
+                    negative_pools[user][rng.randrange(len(negative_pools[user]))]
+                    if sampler is None
+                    else item_index[sampler.sample(self._users[user], rng)],
+                )
                 for user, positive in positives
             )
             loss, gradient = _batch_loss_gradient(
@@ -319,6 +344,14 @@ class BipartiteGraphBPR(BaseRecommender):
                 "regularization": self.regularization,
                 "seed": self.seed,
                 "max_work_units": self.max_work_units,
+                **(
+                    {
+                        "negative_strategy": self.negative_strategy,
+                        "popularity_alpha": self.popularity_alpha,
+                    }
+                    if self.negative_strategy == "popularity"
+                    else {}
+                ),
             },
             self._base_state(),
             {
@@ -332,7 +365,7 @@ class BipartiteGraphBPR(BaseRecommender):
     @classmethod
     def from_state(cls, state: Mapping[str, Any]) -> Self:
         parameters, base, model = parse_envelope(state, cls.model_type)
-        if set(parameters) != {
+        old_parameters = {
             "factors",
             "layers",
             "epochs",
@@ -340,12 +373,18 @@ class BipartiteGraphBPR(BaseRecommender):
             "regularization",
             "seed",
             "max_work_units",
-        }:
+        }
+        if set(parameters) not in (
+            old_parameters,
+            old_parameters | {"negative_strategy", "popularity_alpha"},
+        ):
             raise SerializationError("graph BPR parameters are malformed")
         try:
             instance = cls(**parameters)
         except (TypeError, ValidationError) as error:
             raise SerializationError(f"invalid graph BPR parameters: {error}") from error
+        if set(parameters) != old_parameters and instance.negative_strategy != "popularity":
+            raise SerializationError("graph BPR augmented sampler state must use popularity")
         if (
             not isinstance(base.get("catalog"), list)
             or not isinstance(base.get("users"), list)

@@ -234,6 +234,8 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "learning_rate",
             "regularization",
             "negative_samples",
+            "negative_strategy",
+            "popularity_alpha",
             "seed",
         },
         "confidence_als": {"factors", "epochs", "alpha", "regularization", "seed"},
@@ -264,6 +266,8 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "regularization",
             "seed",
             "max_work_units",
+            "negative_strategy",
+            "popularity_alpha",
         },
         "side_feature_fm": {
             "factors",
@@ -272,6 +276,8 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "regularization",
             "seed",
             "max_work_units",
+            "negative_strategy",
+            "popularity_alpha",
         },
     }
     _unknown(params, allowed_params[model_name], "model.params")

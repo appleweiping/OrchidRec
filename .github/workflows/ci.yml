@@ -73,6 +73,8 @@ jobs:
         run: uv run --locked orchidrec run examples/kg_walk_config.json
       - name: Run training-only bipartite graph BPR smoke test
         run: uv run --locked orchidrec run examples/bipartite_graph_config.json
+      - name: Run bounded training-popularity sampling smoke test
+        run: uv run --locked orchidrec run examples/training_sampling_config.json
       - name: Run sampled evaluation smoke test
         run: uv run --locked orchidrec run examples/sampled_config.json
       - name: Run typed feature pipeline smoke test
@@ -98,6 +100,9 @@ jobs:
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run bipartite graph BPR shared-split benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/bipartite_graph_benchmark_config.json --output-dir artifacts/ci-bipartite-graph-benchmark
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Run training-sampling shared-split benchmark smoke test
+        run: uv run --locked orchidrec benchmark examples/training_sampling_benchmark_config.json --output-dir artifacts/ci-training-sampling-benchmark
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run RecBole interaction benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/recbole-benchmark-config.json --output-dir artifacts/ci-recbole-benchmark
@@ -144,6 +149,7 @@ jobs:
           .ci-wheel-check/bin/orchidrec run examples/sequential_backoff_config.json
           .ci-wheel-check/bin/orchidrec run examples/kg_walk_config.json
           .ci-wheel-check/bin/orchidrec run examples/bipartite_graph_config.json
+          .ci-wheel-check/bin/orchidrec run examples/training_sampling_config.json
           .ci-wheel-check/bin/orchidrec recommend artifacts/side-feature-fm/model.json u1 --k 3
           .ci-wheel-check/bin/orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4
           .ci-wheel-check/bin/orchidrec import-recbole-features --user examples/recbole-side-synthetic.user --item examples/recbole-side-synthetic.item --output artifacts/ci-wheel-recbole-side.json

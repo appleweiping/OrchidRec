@@ -53,6 +53,11 @@ Sampled evaluation is opt-in and reports its mode, sampler, and candidate-set
 fingerprint. Its metrics are **not** directly comparable to full-sort metrics;
 see the [sampling guide](docs/sampling.md) for leakage and resource contracts.
 
+Three local BPR learners also offer an opt-in **training-time** popularity
+negative sampler; it is separate from evaluation candidate sampling. The
+[training-sampling guide](docs/training-sampling.md) defines its train-only
+frequency counts, finite work caps, and legacy uniform compatibility.
+
 Fit a typed feature pipeline on training rows, then reuse its frozen
 vocabularies and numeric statistics on validation rows:
 
@@ -636,7 +641,7 @@ values fail early. Supported model parameters are:
 | --- | --- |
 | `popularity` | `weighted` |
 | `item_knn` | `neighbors`, `shrinkage` |
-| `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed` |
+| `implicit_mf` | `factors`, `epochs`, `learning_rate`, `regularization`, `negative_samples`, `seed`, `negative_strategy`, `popularity_alpha` |
 | `confidence_als` | `factors`, `epochs`, `alpha`, `regularization`, `seed` |
 | `ease` | `regularization`, `max_items`, `max_interactions`, `max_work_units` |
 | `slim_elastic` | `l1`, `l2`, `max_sweeps`, `tolerance`, `max_items`, `max_interactions`, `max_work_units` |
@@ -644,8 +649,8 @@ values fail early. Supported model parameters are:
 | `sequential_markov` | `weighted`, `popularity_mix` |
 | `sequential_backoff` | `weighted`, `backoff_strength`, `popularity_mix`, `max_interactions` |
 | `kg_walk_rec` | `hops`, `relation_weights`, `weighted`, `popularity_mix`, `max_work_units` |
-| `bipartite_graph_bpr` | `factors`, `layers`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
-| `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
+| `bipartite_graph_bpr` | `factors`, `layers`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units`, `negative_strategy`, `popularity_alpha` |
+| `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units`, `negative_strategy`, `popularity_alpha` |
 
 When a seeded latent model's `seed` is absent, the experiment-level seed is used.
 `side_feature_fm` additionally requires `data.features_path`; this path is

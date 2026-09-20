@@ -6,6 +6,17 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.19.0] - 2026-09-20
+
+### Added
+
+- Added an opt-in, bounded training-only popularity-to-the-alpha negative
+  sampler for the three local BPR models. The original uniform RNG and saved
+  parameter shapes remain unchanged by default. Added independent CDF
+  boundary, legacy-state, held-out-label isolation, and resource oracles, plus
+  real experiment and shared-benchmark consumers. This is not RecBole sampler
+  parity.
+
 ## [0.18.0] - 2026-09-20
 
 ### Added

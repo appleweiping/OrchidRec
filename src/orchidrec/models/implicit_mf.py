@@ -11,6 +11,7 @@ from orchidrec._numeric import safe_float
 from orchidrec.data import EntityId, InteractionDataset, stable_id_key
 from orchidrec.errors import SerializationError, ValidationError
 from orchidrec.models.base import BaseRecommender, make_envelope, parse_envelope
+from orchidrec.training_sampling import TrainingNegativeSampler, validate_training_sampling
 
 
 class ImplicitMF(BaseRecommender):
@@ -27,6 +28,8 @@ class ImplicitMF(BaseRecommender):
         regularization: float = 0.01,
         negative_samples: int = 1,
         seed: int = 42,
+        negative_strategy: str = "uniform",
+        popularity_alpha: float = 1.0,
     ) -> None:
         super().__init__()
         if type(factors) is not int or factors <= 0:
@@ -53,12 +56,35 @@ class ImplicitMF(BaseRecommender):
         self.regularization = numeric_regularization
         self.negative_samples = negative_samples
         self.seed = seed
+        self.negative_strategy, self.popularity_alpha = validate_training_sampling(
+            negative_strategy, popularity_alpha
+        )
         self._user_factors: dict[EntityId, list[float]] = {}
         self._item_factors: dict[EntityId, list[float]] = {}
         self._item_bias: dict[EntityId, float] = {}
 
     def _fit_model(self, dataset: InteractionDataset) -> None:
-        del dataset
+        if self.negative_strategy == "popularity":
+            unique_pairs = sum(len(items) for items in self._seen.values())
+            if (
+                self.factors > 64
+                or (len(self._seen) + len(self._catalog)) * self.factors > 65_536
+                or unique_pairs * self.epochs * self.negative_samples * self.factors > 50_000_000
+            ):
+                raise ValidationError("popularity ImplicitMF coordinate work exceeds bound")
+        sampler = (
+            TrainingNegativeSampler(
+                dataset,
+                seen=self._seen,
+                catalog=self._catalog,
+                strategy=self.negative_strategy,
+                alpha=self.popularity_alpha,
+                epochs=self.epochs,
+                draws_per_positive=self.negative_samples,
+            )
+            if self.negative_strategy == "popularity"
+            else None
+        )
         rng = random.Random(self.seed)
         users = sorted(self._seen, key=stable_id_key)
         scale = 0.1 / math.sqrt(self.factors)
@@ -89,7 +115,11 @@ class ImplicitMF(BaseRecommender):
                 if not available:
                     continue
                 for _sample in range(self.negative_samples):
-                    negative_id = available[rng.randrange(len(available))]
+                    negative_id = (
+                        available[rng.randrange(len(available))]
+                        if sampler is None
+                        else sampler.sample(user_id, rng)
+                    )
                     self._update(user_id, positive_id, negative_id)
         values = (
             value
@@ -157,6 +187,14 @@ class ImplicitMF(BaseRecommender):
                 "regularization": self.regularization,
                 "negative_samples": self.negative_samples,
                 "seed": self.seed,
+                **(
+                    {
+                        "negative_strategy": self.negative_strategy,
+                        "popularity_alpha": self.popularity_alpha,
+                    }
+                    if self.negative_strategy == "popularity"
+                    else {}
+                ),
             },
             self._base_state(),
             {
@@ -197,12 +235,17 @@ class ImplicitMF(BaseRecommender):
             "negative_samples",
             "seed",
         }
-        if set(parameters) != expected_parameters:
+        if set(parameters) not in (
+            expected_parameters,
+            expected_parameters | {"negative_strategy", "popularity_alpha"},
+        ):
             raise SerializationError("ImplicitMF parameters are malformed")
         try:
             instance = cls(**parameters)
         except (TypeError, ValidationError) as exc:
             raise SerializationError(f"invalid ImplicitMF parameters: {exc}") from exc
+        if set(parameters) != expected_parameters and instance.negative_strategy != "popularity":
+            raise SerializationError("ImplicitMF augmented sampler state must use popularity")
         instance._restore_base_state(base)
         if set(model) != {"user_factors", "item_factors", "item_bias"}:
             raise SerializationError("ImplicitMF model state is malformed")

@@ -74,6 +74,10 @@ resource limits, token-ID preservation, and unsupported atomic families. A
 separate [`.user` / `.item` side-feature guide](docs/recbole-side.md) explains
 the typed-feature importer.
 
+A [`.kg` / `.link` knowledge guide](docs/recbole-knowledge.md) describes the
+separate local triplet/item-link artifact and its optional read-only catalog
+overlap. It does not add knowledge-aware training or `.net` support.
+
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4
 orchidrec benchmark examples/recbole-benchmark-config.json --output-dir artifacts/recbole-demo

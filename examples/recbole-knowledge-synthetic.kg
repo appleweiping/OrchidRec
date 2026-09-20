@@ -1,0 +1,4 @@
+head_id:token	relation_id:token	tail_id:token
+m.film1	has_genre	m.book
+m.film2	has_genre	m.software
+m.book	related_to	m.software

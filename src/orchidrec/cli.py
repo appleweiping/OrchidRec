@@ -27,6 +27,11 @@ from orchidrec.features import (
     save_encoded_features,
 )
 from orchidrec.models import load_model
+from orchidrec.recbole_knowledge import (
+    KnowledgeLimits,
+    import_recbole_knowledge,
+    save_recbole_knowledge,
+)
 from orchidrec.recbole_side import (
     RecBoleSideLimits,
     import_recbole_side_features,
@@ -85,6 +90,18 @@ def _parser() -> argparse.ArgumentParser:
     side.add_argument("--output", type=Path, required=True)
     for name, default in RecBoleSideLimits().to_state().items():
         side.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
+
+    knowledge = subparsers.add_parser(
+        "import-recbole-knowledge", help="import local .kg/.link knowledge bindings"
+    )
+    knowledge.add_argument("--kg", type=Path, required=True)
+    knowledge.add_argument("--link", type=Path, required=True)
+    knowledge.add_argument("--inter", type=Path)
+    knowledge.add_argument("--minimum-rating", type=float)
+    knowledge.add_argument("--side-features", type=Path)
+    knowledge.add_argument("--output", type=Path, required=True)
+    for name, default in KnowledgeLimits().to_state().items():
+        knowledge.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
 
     fit_features = subparsers.add_parser(
         "fit-features",
@@ -313,6 +330,48 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "rows": len(side.dataset),
                         "schema_reference_sha256": side.schema_reference_sha256,
                         "sources": [source.to_state() for source in side.sources],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.command == "import-recbole-knowledge":
+            _require_distinct_paths(
+                {
+                    "kg": args.kg,
+                    "link": args.link,
+                    **({"inter": args.inter} if args.inter is not None else {}),
+                    **(
+                        {"side-features": args.side_features}
+                        if args.side_features is not None
+                        else {}
+                    ),
+                    "output": args.output,
+                }
+            )
+            knowledge_limits = KnowledgeLimits(
+                **{name: getattr(args, name) for name in KnowledgeLimits().to_state()}
+            )
+            graph = import_recbole_knowledge(
+                kg_path=args.kg,
+                link_path=args.link,
+                inter_path=args.inter,
+                minimum_rating=args.minimum_rating,
+                side_features_path=args.side_features,
+                limits=knowledge_limits,
+            )
+            save_recbole_knowledge(graph, args.output)
+            print(
+                json.dumps(
+                    {
+                        "fingerprint_sha256": graph.fingerprint,
+                        "triples": len(graph.triples),
+                        "links": len(graph.links),
+                        "linked_entities_in_kg": graph.linked_entities_in_kg,
+                        "references": [reference.to_state() for reference in graph.references],
+                        "sources": [source.to_state() for source in graph.sources],
+                        "output": str(args.output),
                     },
                     indent=2,
                     sort_keys=True,

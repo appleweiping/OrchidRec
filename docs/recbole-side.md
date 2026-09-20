@@ -3,8 +3,9 @@
 OrchidRec imports locally supplied tab-separated RecBole-style atomic user
 and item tables into its own typed `FeatureDataset`. This is a strict interchange
 adapter, not the RecBole dataset registry. It does not download or redistribute
-datasets and does not implement `.kg`, `.link`, `.net`, interaction joins, or a
-feature-aware recommender.
+datasets and does not implement interaction joins or a feature-aware
+recommender. A separate [`.kg` / `.link` adapter](recbole-knowledge.md)
+preserves knowledge bindings; `.net` remains unsupported.
 
 ```bash
 orchidrec import-recbole-features \

@@ -5,8 +5,10 @@ implicit-feedback events. It neither downloads data nor bundles RecBole or its
 sample datasets. This is one interoperable format, not support for RecBole's
 other atomic files in this workflow or its full feature semantics. A separate
 [local `.user` / `.item` side-feature adapter](recbole-side.md) imports typed
-feature tables without joining them to interactions; `.kg`, `.link`, and `.net`
-remain unsupported.
+feature tables without joining them to interactions. A separate
+[`.kg` / `.link` knowledge adapter](recbole-knowledge.md) preserves triplets
+and item links with optional read-only interaction overlap; `.net` remains
+unsupported.
 
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4

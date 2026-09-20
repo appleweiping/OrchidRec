@@ -70,6 +70,17 @@ from orchidrec.propensity import (
     popularity_exposure,
     uniform_exposure,
 )
+from orchidrec.recbole_knowledge import (
+    AtomicSource,
+    CatalogReference,
+    ItemEntityLink,
+    KnowledgeLimits,
+    KnowledgeTriple,
+    LoadedKnowledgeLinks,
+    import_recbole_knowledge,
+    load_recbole_knowledge,
+    save_recbole_knowledge,
+)
 from orchidrec.recbole_side import (
     LoadedRecBoleSideFeatures,
     RecBoleSideLimits,
@@ -107,6 +118,7 @@ __all__ = [
     "PAD_INDEX",
     "SAMPLER_REGISTRY",
     "UNKNOWN_INDEX",
+    "AtomicSource",
     "BenchmarkConfig",
     "BenchmarkDataConfig",
     "BenchmarkEvaluationConfig",
@@ -119,6 +131,7 @@ __all__ = [
     "BenchmarkValidationSplitConfig",
     "BootstrapInterval",
     "CandidatePlan",
+    "CatalogReference",
     "ConfidenceALS",
     "DatasetFormat",
     "DatasetSummary",
@@ -139,8 +152,12 @@ __all__ = [
     "ImplicitMF",
     "Interaction",
     "InteractionDataset",
+    "ItemEntityLink",
     "ItemKNN",
+    "KnowledgeLimits",
+    "KnowledgeTriple",
     "LoadedDataset",
+    "LoadedKnowledgeLinks",
     "LoadedRecBoleSideFeatures",
     "MetricReport",
     "ModelTuningResult",
@@ -163,6 +180,7 @@ __all__ = [
     "evaluate_ranking",
     "evaluate_unbiased_ranking",
     "feature_dataset_sha256",
+    "import_recbole_knowledge",
     "import_recbole_side_features",
     "interaction_fingerprint",
     "interval_from_draws",
@@ -175,6 +193,7 @@ __all__ = [
     "load_encoded_features",
     "load_feature_dataset",
     "load_movielens",
+    "load_recbole_knowledge",
     "load_recbole_side_features",
     "paired_bootstrap_mean",
     "paired_comparison_from_draws",
@@ -187,9 +206,10 @@ __all__ = [
     "save_benchmark_reports",
     "save_encoded_features",
     "save_feature_dataset",
+    "save_recbole_knowledge",
     "save_recbole_side_features",
     "temporal_split",
     "uniform_exposure",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"

@@ -6,6 +6,20 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.11.0] - 2026-09-19
+
+### Added
+
+- Added strict, bounded local RecBole-style `.kg` triple and `.link` item/entity
+  interchange, preserving token IDs and one-to-one links without remapping or
+  filtering virtual entities. Optional `.inter` and `.item` references record
+  read-only catalog overlap with source and normalized-state provenance.
+- Added canonical checksummed, atomic no-overwrite knowledge artifacts,
+  shared save/load semantic validation, public-constructor corruption tests,
+  synthetic CLI fixtures, and wheel/sdist smoke coverage. This does not train
+  a knowledge-aware model, implement `.net`, or claim full RecBole registry
+  parity.
+
 ## [0.10.0] - 2026-09-19
 
 - Added strict local RecBole-style `.user` and `.item` side-feature import

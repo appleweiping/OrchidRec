@@ -20,12 +20,19 @@ from orchidrec.errors import OrchidRecError, ValidationError
 from orchidrec.experiment import run_experiment
 from orchidrec.features import (
     DEFAULT_FEATURE_LIMITS,
+    FeatureDataset,
     FeatureLimits,
     FittedFeaturePipeline,
     load_feature_dataset,
     save_encoded_features,
 )
 from orchidrec.models import load_model
+from orchidrec.recbole_side import (
+    RecBoleSideLimits,
+    import_recbole_side_features,
+    load_recbole_side_features,
+    save_recbole_side_features,
+)
 from orchidrec.reporting import save_benchmark_reports
 
 
@@ -69,11 +76,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     dataset_summary.add_argument("--minimum-rating", type=float)
 
+    side = subparsers.add_parser(
+        "import-recbole-features", help="import local .user/.item atomic side-feature tables"
+    )
+    side.add_argument("--user", type=Path)
+    side.add_argument("--item", type=Path)
+    side.add_argument("--schema-from", type=Path)
+    side.add_argument("--output", type=Path, required=True)
+    for name, default in RecBoleSideLimits().to_state().items():
+        side.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
+
     fit_features = subparsers.add_parser(
         "fit-features",
         help="fit a typed preprocessing pipeline from training-only feature rows",
     )
     fit_features.add_argument("--input", type=Path, required=True)
+    fit_features.add_argument(
+        "--input-format", choices=("feature-dataset", "recbole-side"), default="feature-dataset"
+    )
     fit_features.add_argument("--output", type=Path, required=True)
     fit_features.add_argument("--max-rows", type=int, default=DEFAULT_FEATURE_LIMITS.max_rows)
     fit_features.add_argument(
@@ -103,6 +123,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     transform_features.add_argument("--pipeline", type=Path, required=True)
     transform_features.add_argument("--input", type=Path, required=True)
+    transform_features.add_argument(
+        "--input-format", choices=("feature-dataset", "recbole-side"), default="feature-dataset"
+    )
     transform_features.add_argument("--output", type=Path, required=True)
     transform_features.add_argument(
         "--max-pipeline-bytes",
@@ -124,6 +147,13 @@ def _feature_limits(args: argparse.Namespace) -> FeatureLimits:
         max_vocab_token_bytes=args.max_vocab_token_bytes,
         max_state_bytes=args.max_state_bytes,
     )
+
+
+def _load_feature_input(path: Path, input_format: str, limits: FeatureLimits) -> FeatureDataset:
+    if input_format == "recbole-side":
+        dataset = load_recbole_side_features(path, max_output_bytes=limits.max_state_bytes).dataset
+        return FeatureDataset.from_state(dataset.to_state(), limits=limits)
+    return load_feature_dataset(path, limits=limits)
 
 
 def _parse_cli_id(raw: str) -> EntityId:
@@ -247,11 +277,53 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             print(json.dumps(loaded.summary.to_dict(), indent=2, sort_keys=True))
             return 0
+        if args.command == "import-recbole-features":
+            if args.user is None and args.item is None:
+                raise ValidationError("--user or --item is required")
+            _require_distinct_paths(
+                {
+                    **({"user": args.user} if args.user is not None else {}),
+                    **({"item": args.item} if args.item is not None else {}),
+                    **({"schema-from": args.schema_from} if args.schema_from is not None else {}),
+                    "output": args.output,
+                }
+            )
+            side_limits = RecBoleSideLimits(
+                **{name: getattr(args, name) for name in RecBoleSideLimits().to_state()}
+            )
+            side = import_recbole_side_features(
+                user_path=args.user,
+                item_path=args.item,
+                limits=side_limits,
+                schema_from=(
+                    load_recbole_side_features(
+                        args.schema_from, max_output_bytes=side_limits.max_output_bytes
+                    )
+                    if args.schema_from is not None
+                    else None
+                ),
+            )
+            save_recbole_side_features(side, args.output)
+            print(
+                json.dumps(
+                    {
+                        "dataset_sha256": side.to_state()["dataset_sha256"],
+                        "features": len(side.dataset.schema),
+                        "output": str(args.output),
+                        "rows": len(side.dataset),
+                        "schema_reference_sha256": side.schema_reference_sha256,
+                        "sources": [source.to_state() for source in side.sources],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
         if args.command == "fit-features":
             _require_distinct_paths({"input": args.input, "output": args.output})
             limits = _feature_limits(args)
             pipeline = FittedFeaturePipeline.fit(
-                load_feature_dataset(args.input, limits=limits),
+                _load_feature_input(args.input, args.input_format, limits),
                 limits=limits,
             )
             pipeline.save(args.output)
@@ -281,7 +353,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.pipeline,
                 max_state_bytes=args.max_pipeline_bytes,
             )
-            encoded = pipeline.transform(load_feature_dataset(args.input, limits=pipeline.limits))
+            encoded = pipeline.transform(
+                _load_feature_input(args.input, args.input_format, pipeline.limits)
+            )
             save_encoded_features(encoded, args.output, limits=pipeline.limits)
             print(
                 json.dumps(

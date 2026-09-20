@@ -69,8 +69,10 @@ resource-limit, and persistence contracts.
 For local RecBole `.inter` interaction files, use `--format recbole-inter` with
 an explicit rating threshold when the header has `rating:float`. A runnable
 synthetic fixture and benchmark config are in `examples/`; see the
-[RecBole interchange guide](docs/recbole-inter.md) for its strict schema,
-resource limits, token-ID preservation, and unsupported atomic families.
+[RecBole interaction guide](docs/recbole-inter.md) for its strict schema,
+resource limits, token-ID preservation, and unsupported atomic families. A
+separate [`.user` / `.item` side-feature guide](docs/recbole-side.md) explains
+the typed-feature importer.
 
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4

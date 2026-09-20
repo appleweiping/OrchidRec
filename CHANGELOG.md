@@ -6,6 +6,20 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.10.0] - 2026-09-19
+
+- Added strict local RecBole-style `.user` and `.item` side-feature import
+  for token, float, token-sequence, and float-sequence columns, preserving
+  string IDs and separate namespaces without joining interactions.
+- Added bounded, checksummed, atomic no-overwrite artifacts and an explicit
+  training-schema reference for held-out transforms; oversized expanded
+  feature state is rejected before whole-state materialization.
+- Added synthetic interchange examples, installed CLI smoke, and adversarial
+  parser, provenance, schema-lock, and output-bound tests.
+
+This is not RecBole's dataset registry or feature-aware model training;
+`.kg`, `.link`, and `.net` remain unsupported.
+
 ## [0.9.0] - 2026-09-19
 
 - Added a strict, bounded adapter for user-supplied RecBole `.inter` atomic

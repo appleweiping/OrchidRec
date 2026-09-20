@@ -3,8 +3,10 @@
 OrchidRec can import a locally supplied RecBole atomic **interaction** file as
 implicit-feedback events. It neither downloads data nor bundles RecBole or its
 sample datasets. This is one interoperable format, not support for RecBole's
-other atomic files (`.user`, `.item`, `.kg`, `.link`, `.net`) or its full feature
-semantics.
+other atomic files in this workflow or its full feature semantics. A separate
+[local `.user` / `.item` side-feature adapter](recbole-side.md) imports typed
+feature tables without joining them to interactions; `.kg`, `.link`, and `.net`
+remain unsupported.
 
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4

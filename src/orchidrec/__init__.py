@@ -70,6 +70,13 @@ from orchidrec.propensity import (
     popularity_exposure,
     uniform_exposure,
 )
+from orchidrec.recbole_side import (
+    LoadedRecBoleSideFeatures,
+    RecBoleSideLimits,
+    import_recbole_side_features,
+    load_recbole_side_features,
+    save_recbole_side_features,
+)
 from orchidrec.reporting import BenchmarkReportPaths, save_benchmark_reports
 from orchidrec.sampling import (
     SAMPLER_REGISTRY,
@@ -134,11 +141,13 @@ __all__ = [
     "InteractionDataset",
     "ItemKNN",
     "LoadedDataset",
+    "LoadedRecBoleSideFeatures",
     "MetricReport",
     "ModelTuningResult",
     "NumericStatistics",
     "PairedBootstrapResult",
     "Popularity",
+    "RecBoleSideLimits",
     "Recommendation",
     "SamplingConfig",
     "SequenceKeep",
@@ -154,6 +163,7 @@ __all__ = [
     "evaluate_ranking",
     "evaluate_unbiased_ranking",
     "feature_dataset_sha256",
+    "import_recbole_side_features",
     "interaction_fingerprint",
     "interval_from_draws",
     "ips_ndcg_at_k",
@@ -165,6 +175,7 @@ __all__ = [
     "load_encoded_features",
     "load_feature_dataset",
     "load_movielens",
+    "load_recbole_side_features",
     "paired_bootstrap_mean",
     "paired_comparison_from_draws",
     "popularity_exposure",
@@ -176,8 +187,9 @@ __all__ = [
     "save_benchmark_reports",
     "save_encoded_features",
     "save_feature_dataset",
+    "save_recbole_side_features",
     "temporal_split",
     "uniform_exposure",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"

@@ -1,0 +1,3 @@
+item_id:token	price:float	category:token
+item-01	12.5	book
+item-02	5.0	software

@@ -127,13 +127,17 @@ class KGWalkRec(BaseRecommender):
             raise ValidationError("dataset must be a non-empty InteractionDataset")
         if type(knowledge) is not LoadedKnowledgeLinks:
             raise ValidationError("knowledge must be a LoadedKnowledgeLinks artifact")
-        _validate_semantics(knowledge)
         if len(dataset) > MAX_INTERACTIONS or len(dataset.user_ids) > MAX_USERS:
             raise ValidationError("KGWalkRec interaction or user limit exceeded")
         if len(dataset.item_ids) > MAX_ITEMS:
             raise ValidationError("KGWalkRec catalog limit exceeded")
-        if len(knowledge.triples) > MAX_TRIPLES or len(knowledge.links) > MAX_LINKS:
+        oversized_triples = (
+            type(knowledge.triples) is tuple and len(knowledge.triples) > MAX_TRIPLES
+        )
+        oversized_links = type(knowledge.links) is tuple and len(knowledge.links) > MAX_LINKS
+        if oversized_triples or oversized_links:
             raise ValidationError("KGWalkRec graph or link limit exceeded")
+        _validate_semantics(knowledge)
         if any(type(item) is not str for item in dataset.item_ids):
             raise ValidationError("KGWalkRec item IDs must be strings matching .link tokens")
         for ident in (*dataset.user_ids, *dataset.item_ids):
@@ -279,6 +283,21 @@ class KGWalkRec(BaseRecommender):
             instance = cls(**parameters)
         except (TypeError, ValidationError) as error:
             raise SerializationError(f"invalid KGWalkRec parameters: {error}") from error
+        if (
+            set(base) != {"catalog", "popularity", "users"}
+            or any(not isinstance(base[key], list) for key in ("catalog", "popularity", "users"))
+            or len(base["catalog"]) > MAX_ITEMS
+            or len(base["popularity"]) > MAX_ITEMS
+            or len(base["users"]) > MAX_USERS
+        ):
+            raise SerializationError("KGWalkRec base arrays exceed limits")
+        for entry in base["users"]:
+            if (
+                not isinstance(entry, Mapping)
+                or not isinstance(entry.get("seen"), list)
+                or len(entry["seen"]) > MAX_ITEMS
+            ):
+                raise SerializationError("KGWalkRec user seen array exceeds limits")
         instance._restore_base_state(base)
         if (
             not instance._catalog
@@ -288,6 +307,12 @@ class KGWalkRec(BaseRecommender):
             raise SerializationError("KGWalkRec base state exceeds limits")
         if any(type(item) is not str for item in instance._catalog):
             raise SerializationError("KGWalkRec catalog items must be strings")
+        try:
+            popularity_total = math.fsum(instance._popularity.values())
+        except (OverflowError, ValueError) as error:
+            raise SerializationError("KGWalkRec popularity total is not finite") from error
+        if popularity_total > MAX_TOTAL_VALUE:
+            raise SerializationError("KGWalkRec popularity total exceeds bound")
         for ident in (*instance._catalog, *instance._seen):
             try:
                 _id(ident, "state ID")
@@ -412,6 +437,12 @@ class KGWalkRec(BaseRecommender):
             seeds[user] = row
         if list(seeds) != sorted(seeds, key=stable_id_key):
             raise SerializationError("KGWalkRec seed users are not stably ordered")
+        try:
+            seed_total = math.fsum(weight for row in seeds.values() for weight in row.values())
+        except (OverflowError, ValueError) as error:
+            raise SerializationError("KGWalkRec aggregate seed total is not finite") from error
+        if seed_total > MAX_TOTAL_VALUE:
+            raise SerializationError("KGWalkRec aggregate seed total exceeds bound")
         instance._seeds = seeds
         try:
             instance._prepare_walks()

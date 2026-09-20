@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -273,6 +274,53 @@ class KGWalkRecTests(unittest.TestCase):
         self.assertEqual(model.work_units, 3)
         with self.assertRaisesRegex(ValidationError, "work limit"):
             KGWalkRec(hops=1, max_work_units=2).fit(train, knowledge())
+
+    def test_oversized_graph_and_base_arrays_fail_before_deep_validation(self) -> None:
+        graph = knowledge()
+        train = InteractionDataset([Interaction("u", "A")])
+        oversized = replace(graph, triples=graph.triples * 5001)
+        with (
+            patch("orchidrec.models.kg_walk_rec._validate_semantics") as validate,
+            self.assertRaisesRegex(ValidationError, "graph or link limit"),
+        ):
+            KGWalkRec().fit(train, oversized)
+        validate.assert_not_called()
+
+        original = KGWalkRec().fit(train, graph).to_state()
+        for key, value in (
+            ("catalog", ["A"] * 2001),
+            ("users", original["base"]["users"] * 2001),
+        ):
+            with self.subTest(key=key):
+                bad = copy.deepcopy(original)
+                bad["base"][key] = value
+                with (
+                    patch.object(KGWalkRec, "_restore_base_state") as restore,
+                    self.assertRaisesRegex(SerializationError, "base arrays exceed limits"),
+                ):
+                    KGWalkRec.from_state(bad)
+                restore.assert_not_called()
+        bad = copy.deepcopy(original)
+        bad["base"]["users"][0]["seen"] = ["A"] * 2001
+        with (
+            patch.object(KGWalkRec, "_restore_base_state") as restore,
+            self.assertRaisesRegex(SerializationError, "seen array exceeds limits"),
+        ):
+            KGWalkRec.from_state(bad)
+        restore.assert_not_called()
+
+    def test_loaded_aggregate_values_preserve_fit_bound(self) -> None:
+        train = InteractionDataset([Interaction("u", "A"), Interaction("v", "B")])
+        original = KGWalkRec().fit(train, knowledge()).to_state()
+        bad = copy.deepcopy(original)
+        bad["base"]["popularity"] = [6e11, 6e11]
+        with self.assertRaisesRegex(SerializationError, "popularity total exceeds bound"):
+            KGWalkRec.from_state(bad)
+        bad = copy.deepcopy(original)
+        for entry in bad["model"]["user_seeds"]:
+            entry["items"][0]["weight"] = 6e11
+        with self.assertRaisesRegex(SerializationError, "aggregate seed total exceeds bound"):
+            KGWalkRec.from_state(bad)
 
     def test_importer_experiment_and_shared_benchmark_provenance(self) -> None:
         graph = import_recbole_knowledge(

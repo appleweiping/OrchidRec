@@ -48,6 +48,7 @@ def _positive_int(value: object, name: str) -> int:
 @dataclass(frozen=True, slots=True)
 class DataConfig:
     path: Path
+    features_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +106,14 @@ class ExperimentConfig:
 
         return {
             "seed": self.seed,
-            "data": {"path": str(self.data.path)},
+            "data": {
+                "path": str(self.data.path),
+                **(
+                    {"features_path": str(self.data.features_path)}
+                    if self.data.features_path
+                    else {}
+                ),
+            },
             "split": {"method": self.split.method, "test_ratio": self.split.test_ratio},
             "model": {"name": self.model.name, "params": dict(self.model.params)},
             "evaluation": {
@@ -145,7 +153,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     directory = Path(base_dir).resolve()
 
     data = _object(root["data"], "data")
-    _unknown(data, {"path"}, "data")
+    _unknown(data, {"path", "features_path"}, "data")
     data_path = data.get("path")
     if not isinstance(data_path, str) or not data_path:
         raise ConfigurationError("data.path must be a non-empty string")
@@ -153,6 +161,15 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     if not resolved_data.is_absolute():
         resolved_data = directory / resolved_data
     resolved_data = resolved_data.resolve()
+    feature_path = data.get("features_path")
+    if feature_path is not None and (not isinstance(feature_path, str) or not feature_path):
+        raise ConfigurationError("data.features_path must be a non-empty string or omitted")
+    resolved_features = None
+    if feature_path is not None:
+        resolved_features = Path(feature_path)
+        if not resolved_features.is_absolute():
+            resolved_features = directory / resolved_features
+        resolved_features = resolved_features.resolve()
 
     split = _object(root.get("split", {}), "split")
     _unknown(split, {"method", "test_ratio"}, "split")
@@ -182,10 +199,11 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "implicit_mf",
         "user_knn",
         "sequential_markov",
+        "side_feature_fm",
     }:
         raise ConfigurationError(
             "model.name must be popularity, item_knn, implicit_mf, confidence_als, ease, "
-            "slim_elastic, user_knn, or sequential_markov"
+            "slim_elastic, user_knn, sequential_markov, or side_feature_fm"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -212,6 +230,14 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         },
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
+        "side_feature_fm": {
+            "factors",
+            "epochs",
+            "learning_rate",
+            "regularization",
+            "seed",
+            "max_work_units",
+        },
     }
     _unknown(params, allowed_params[model_name], "model.params")
     from orchidrec.models import (
@@ -221,6 +247,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         ItemKNN,
         Popularity,
         SequentialMarkov,
+        SideFeatureFM,
         SLIMElastic,
         UserKNN,
     )
@@ -234,11 +261,14 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
+        "side_feature_fm": SideFeatureFM,
     }
     try:
         model_types[model_name](**dict(params))
     except (TypeError, ValidationError) as exc:
         raise ConfigurationError(f"invalid model.params for {model_name}: {exc}") from exc
+    if (model_name == "side_feature_fm") != (resolved_features is not None):
+        raise ConfigurationError("data.features_path is required only for side_feature_fm")
 
     evaluation = _object(root.get("evaluation", {}), "evaluation")
     _unknown(evaluation, {"k", "exclude_seen", "exposure", "sampling"}, "evaluation")
@@ -284,7 +314,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
 
     return ExperimentConfig(
         seed=seed,
-        data=DataConfig(path=resolved_data),
+        data=DataConfig(path=resolved_data, features_path=resolved_features),
         split=SplitConfig(method=split_method, test_ratio=numeric_ratio),
         model=ModelConfig(name=model_name, params=dict(params)),
         evaluation=EvaluationConfig(

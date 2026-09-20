@@ -11,7 +11,7 @@ runtime dependencies outside the Python standard library**.
 
 It is intentionally inspectable while providing a complete experimental path:
 strict interaction validation, local MovieLens adapters, content fingerprints,
-deterministic ID mapping, three train/test split strategies, eight
+deterministic ID mapping, three train/test split strategies, nine
 recommenders, six ranking metrics, user bootstrap intervals, paired model
 comparisons, opt-in uniform/popularity sampled candidate evaluation,
 leakage-safe typed feature preprocessing, portable JSON state,
@@ -34,6 +34,7 @@ example instead:
 orchidrec run examples/config.json
 orchidrec run examples/ease_config.json
 orchidrec run examples/slim_elastic_config.json
+orchidrec run examples/side_feature_fm_config.json
 orchidrec run examples/sampled_config.json
 ```
 
@@ -64,6 +65,10 @@ The validation example contains unseen tokens, which map to the reserved
 unknown index without changing fitted state. See the
 [typed feature pipeline guide](docs/features.md) for the schema, provenance,
 resource-limit, and persistence contracts.
+
+The [side-feature FM example](examples/side_feature_fm_config.json) joins
+training-only user/item feature rows to implicit interactions for a bounded
+pairwise factorization machine; see its [objective and leakage contract](docs/side-feature-fm.md).
 
 ## RecBole interaction interchange
 
@@ -611,8 +616,12 @@ values fail early. Supported model parameters are:
 | `slim_elastic` | `l1`, `l2`, `max_sweeps`, `tolerance`, `max_items`, `max_interactions`, `max_work_units` |
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
+| `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
 
-When either latent model's `seed` is absent, the experiment-level seed is used.
+When a seeded latent model's `seed` is absent, the experiment-level seed is used.
+`side_feature_fm` additionally requires `data.features_path`; this path is
+invalid for the other models. This model is currently supported by the
+single-model experiment runner, not the shared-split benchmark registry.
 
 ## CLI
 

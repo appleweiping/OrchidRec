@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orchidrec"
-version = "0.14.0"
+version = "0.15.0"
 description = "A dependency-free toolkit for reproducible recommendation experiments"
 readme = "README.md"
 requires-python = ">=3.11"

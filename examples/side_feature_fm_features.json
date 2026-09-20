@@ -1,0 +1,24 @@
+{
+  "format": "orchidrec.feature-dataset",
+  "schema_version": 1,
+  "schema": [
+    {"name": "region", "kind": "token", "source": "user", "sequence_length": null, "keep": null},
+    {"name": "interests", "kind": "token-sequence", "source": "user", "sequence_length": 2, "keep": "head"},
+    {"name": "topic", "kind": "token", "source": "item", "sequence_length": null, "keep": null},
+    {"name": "freshness", "kind": "float", "source": "item", "sequence_length": null, "keep": null}
+  ],
+  "rows": [
+    {"source": "user", "key": "u1", "values": {"region": "north", "interests": ["science", "energy"]}},
+    {"source": "user", "key": "u2", "values": {"region": "north", "interests": ["energy", "markets"]}},
+    {"source": "user", "key": "u3", "values": {"region": "south", "interests": ["science", "policy"]}},
+    {"source": "user", "key": "u4", "values": {"region": "south", "interests": ["markets", "policy"]}},
+    {"source": "user", "key": "u5", "values": {"region": "west", "interests": ["energy", "policy"]}},
+    {"source": "user", "key": "u6", "values": {"region": "west", "interests": ["science", "markets"]}},
+    {"source": "item", "key": "a", "values": {"topic": "science", "freshness": 1}},
+    {"source": "item", "key": "b", "values": {"topic": "energy", "freshness": 2}},
+    {"source": "item", "key": "c", "values": {"topic": "science", "freshness": 3}},
+    {"source": "item", "key": "d", "values": {"topic": "markets", "freshness": 4}},
+    {"source": "item", "key": "e", "values": {"topic": "policy", "freshness": 5}},
+    {"source": "item", "key": "f", "values": {"topic": "energy", "freshness": 6}}
+  ]
+}

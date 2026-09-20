@@ -1,0 +1,23 @@
+{
+  "seed": 2026,
+  "data": {
+    "path": "interactions.json",
+    "features_path": "side_feature_fm_features.json"
+  },
+  "split": {"method": "leave_one_out", "test_ratio": 0.2},
+  "model": {
+    "name": "side_feature_fm",
+    "params": {
+      "factors": 8,
+      "epochs": 12,
+      "learning_rate": 0.02,
+      "regularization": 0.001,
+      "max_work_units": 100000000
+    }
+  },
+  "evaluation": {"k": 3, "exclude_seen": true},
+  "output": {
+    "model_path": "../artifacts/side-feature-fm/model.json",
+    "report_path": "../artifacts/side-feature-fm/report.json"
+  }
+}

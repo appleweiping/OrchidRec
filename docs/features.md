@@ -6,9 +6,11 @@ purpose: vocabularies and numeric statistics are learned from the training
 split, persisted with a checksum, and then reused unchanged for validation,
 test, or serving data.
 
-The pipeline is independent from the built-in collaborative recommenders. It
-prepares model-ready features and records their provenance; it does not yet
-define a feature-aware ranking model or join feature rows to interactions.
+The pipeline can be used independently for feature preparation. `SideFeatureFM`
+also fits it on the training split's user/item rows and joins those rows to
+implicit interactions by user/item ID. Interaction-context rows are not
+supported by that model because interactions have no stable event ID; see
+[the side-feature FM contract](side-feature-fm.md).
 
 ## Data model
 

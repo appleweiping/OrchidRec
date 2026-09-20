@@ -6,6 +6,16 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.15.0] - 2026-09-20
+
+### Added
+
+- Added `SideFeatureFM`, a bounded deterministic pairwise factorization machine
+  that uses the existing train-only typed user/item feature pipeline. Added
+  experiment configuration, strict model persistence, a synthetic example,
+  hand-gradient tests, and explicit join/leakage/resource contracts. This is
+  one feature-aware model, not context-aware or full RecBole model parity.
+
 ## [0.14.0] - 2026-09-20
 
 ### Added

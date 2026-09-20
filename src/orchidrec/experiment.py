@@ -12,6 +12,7 @@ from orchidrec._files import atomic_write_text, require_distinct_paths
 from orchidrec.config import ExperimentConfig
 from orchidrec.data import EntityId, InteractionDataset, stable_id_key
 from orchidrec.errors import ConfigurationError, SerializationError, ValidationError
+from orchidrec.features import FeatureDataset, FeatureSource, load_feature_dataset
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
     EASE,
@@ -22,6 +23,7 @@ from orchidrec.models import (
     Popularity,
     Recommendation,
     SequentialMarkov,
+    SideFeatureFM,
     SLIMElastic,
     UserKNN,
     save_model,
@@ -119,7 +121,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
     """Construct a configured model without fitting it."""
 
     params = dict(parameters)
-    if name in {"implicit_mf", "confidence_als"}:
+    if name in {"implicit_mf", "confidence_als", "side_feature_fm"}:
         params.setdefault("seed", experiment_seed)
     registry: dict[str, type[BaseRecommender]] = {
         "popularity": Popularity,
@@ -130,6 +132,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
+        "side_feature_fm": SideFeatureFM,
     }
     model_class = registry.get(name)
     if model_class is None:
@@ -158,6 +161,8 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     if not isinstance(config, ExperimentConfig):
         raise ConfigurationError("config must be an ExperimentConfig")
     paths = {"data.path": config.data.path}
+    if config.data.features_path is not None:
+        paths["data.features_path"] = config.data.features_path
     if config.output.model_path is not None:
         paths["output.model_path"] = config.output.model_path
     if config.output.report_path is not None:
@@ -174,7 +179,26 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     if train_pairs & test_pairs:
         raise ConfigurationError("split leaked a user-item pair across train and test")
     model = build_model(config.model.name, config.model.params, experiment_seed=config.seed)
-    model.fit(split.train)
+    if isinstance(model, SideFeatureFM):
+        if config.data.features_path is None:
+            raise ConfigurationError("side_feature_fm requires data.features_path")
+        raw_features = load_feature_dataset(config.data.features_path)
+        train_users = set(split.train.user_ids)
+        train_items = set(split.train.item_ids)
+        selected = FeatureDataset(
+            raw_features.schema,
+            (
+                row
+                for row in raw_features
+                if (row.source is FeatureSource.USER and row.key in train_users)
+                or (row.source is FeatureSource.ITEM and row.key in train_items)
+            ),
+        )
+        model.fit(split.train, selected)
+    else:
+        if config.data.features_path is not None:
+            raise ConfigurationError("data.features_path is supported only by side_feature_fm")
+        model.fit(split.train)
     catalog = set(model.catalog)
     relevant_sets: dict[EntityId, set[EntityId]] = {}
     evaluated_test_size = 0

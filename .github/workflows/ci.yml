@@ -59,6 +59,8 @@ jobs:
           --output artifacts/ci-recbole-network.json
       - name: Run EASE experiment smoke test
         run: uv run --locked orchidrec run examples/ease_config.json
+      - name: Run training-only side-feature FM experiment smoke test
+        run: uv run --locked orchidrec run examples/side_feature_fm_config.json
       - name: Run sampled evaluation smoke test
         run: uv run --locked orchidrec run examples/sampled_config.json
       - name: Run typed feature pipeline smoke test
@@ -117,6 +119,8 @@ jobs:
           .ci-wheel-check/bin/python -c "import orchidrec; print(orchidrec.__version__)"
           .ci-wheel-check/bin/orchidrec --help
           .ci-wheel-check/bin/orchidrec run examples/ease_config.json
+          .ci-wheel-check/bin/orchidrec run examples/side_feature_fm_config.json
+          .ci-wheel-check/bin/orchidrec recommend artifacts/side-feature-fm/model.json u1 --k 3
           .ci-wheel-check/bin/orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4
           .ci-wheel-check/bin/orchidrec import-recbole-features --user examples/recbole-side-synthetic.user --item examples/recbole-side-synthetic.item --output artifacts/ci-wheel-recbole-side.json
           .ci-wheel-check/bin/orchidrec import-recbole-knowledge --kg examples/recbole-knowledge-synthetic.kg --link examples/recbole-knowledge-synthetic.link --inter examples/recbole-synthetic.inter --minimum-rating 4 --side-features artifacts/ci-wheel-recbole-side.json --output artifacts/ci-wheel-recbole-knowledge.json

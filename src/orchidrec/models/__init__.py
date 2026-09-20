@@ -8,6 +8,7 @@ from orchidrec.models.io import load_model, model_from_state, save_model
 from orchidrec.models.item_knn import ItemKNN
 from orchidrec.models.popularity import Popularity
 from orchidrec.models.sequential_markov import SequentialMarkov
+from orchidrec.models.side_feature_fm import SideFeatureFM
 from orchidrec.models.slim_elastic import SLIMElastic
 from orchidrec.models.user_knn import UserKNN
 
@@ -21,6 +22,7 @@ __all__ = [
     "Recommendation",
     "SLIMElastic",
     "SequentialMarkov",
+    "SideFeatureFM",
     "UserKNN",
     "load_model",
     "model_from_state",

@@ -55,6 +55,7 @@ from orchidrec.features import (
 from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
     EASE,
+    BipartiteGraphBPR,
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
@@ -156,6 +157,7 @@ __all__ = [
     "BenchmarkTuningConfig",
     "BenchmarkTuningResult",
     "BenchmarkValidationSplitConfig",
+    "BipartiteGraphBPR",
     "BootstrapInterval",
     "CandidatePlan",
     "CatalogReference",
@@ -258,4 +260,4 @@ __all__ = [
     "verify_atomic_registry",
 ]
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"

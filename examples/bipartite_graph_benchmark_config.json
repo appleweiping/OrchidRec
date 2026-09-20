@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "seed": 2026,
+  "data": {"path": "bipartite_graph_interactions.json", "format": "orchidrec-json"},
+  "split": {"method": "leave_one_out"},
+  "evaluation": {"k": 2, "exclude_seen": true, "bootstrap_samples": 20},
+  "models": [
+    {"label": "popularity", "name": "popularity"},
+    {"label": "graph-bpr", "name": "bipartite_graph_bpr", "params": {"factors": 2, "layers": 1, "epochs": 4}}
+  ]
+}

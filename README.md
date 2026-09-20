@@ -402,6 +402,15 @@ score can be evaluated against non-KG models on one shared split. See
 [the model guide](docs/kg-walk-rec.md) for the hand oracle, provenance limits,
 and runnable import → experiment → benchmark workflow.
 
+### BipartiteGraphBPR
+
+Learns bounded user/item embeddings on the **training-only** interaction graph
+with symmetric degree-normalized propagation and full-batch pairwise BPR.
+Independent hand and finite-difference oracles check the propagation and
+reverse gradient. See the [model guide](docs/bipartite-graph-bpr.md) for the
+explicit limits, leak boundary, and runnable experiment/benchmark. This local
+baseline is not a RecBole/LensKit LightGCN reproduction.
+
 ## Top-K behavior
 
 All models share the same ranking implementation:
@@ -635,6 +644,7 @@ values fail early. Supported model parameters are:
 | `sequential_markov` | `weighted`, `popularity_mix` |
 | `sequential_backoff` | `weighted`, `backoff_strength`, `popularity_mix`, `max_interactions` |
 | `kg_walk_rec` | `hops`, `relation_weights`, `weighted`, `popularity_mix`, `max_work_units` |
+| `bipartite_graph_bpr` | `factors`, `layers`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
 | `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
 
 When a seeded latent model's `seed` is absent, the experiment-level seed is used.

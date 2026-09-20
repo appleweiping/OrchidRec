@@ -1,6 +1,7 @@
 """Recommenders included with OrchidRec."""
 
 from orchidrec.models.base import BaseRecommender, Recommendation
+from orchidrec.models.bipartite_graph_bpr import BipartiteGraphBPR
 from orchidrec.models.confidence_als import ConfidenceALS
 from orchidrec.models.ease import EASE
 from orchidrec.models.implicit_mf import ImplicitMF
@@ -17,6 +18,7 @@ from orchidrec.models.user_knn import UserKNN
 __all__ = [
     "EASE",
     "BaseRecommender",
+    "BipartiteGraphBPR",
     "ConfidenceALS",
     "ImplicitMF",
     "ItemKNN",

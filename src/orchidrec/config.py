@@ -216,12 +216,13 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "sequential_markov",
         "sequential_backoff",
         "kg_walk_rec",
+        "bipartite_graph_bpr",
         "side_feature_fm",
     }:
         raise ConfigurationError(
             "model.name must be popularity, item_knn, implicit_mf, confidence_als, ease, "
             "slim_elastic, user_knn, sequential_markov, sequential_backoff, kg_walk_rec, "
-            "or side_feature_fm"
+            "bipartite_graph_bpr, or side_feature_fm"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -255,6 +256,15 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
             "max_interactions",
         },
         "kg_walk_rec": {"hops", "relation_weights", "weighted", "popularity_mix", "max_work_units"},
+        "bipartite_graph_bpr": {
+            "factors",
+            "layers",
+            "epochs",
+            "learning_rate",
+            "regularization",
+            "seed",
+            "max_work_units",
+        },
         "side_feature_fm": {
             "factors",
             "epochs",
@@ -267,6 +277,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     _unknown(params, allowed_params[model_name], "model.params")
     from orchidrec.models import (
         EASE,
+        BipartiteGraphBPR,
         ConfidenceALS,
         ImplicitMF,
         ItemKNN,
@@ -280,6 +291,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
     )
 
     model_types = {
+        "bipartite_graph_bpr": BipartiteGraphBPR,
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,

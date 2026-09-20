@@ -15,6 +15,7 @@ from orchidrec.datasets import DatasetFormat
 from orchidrec.errors import ConfigurationError, ValidationError
 from orchidrec.models import (
     EASE,
+    BipartiteGraphBPR,
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
@@ -215,6 +216,7 @@ def _validated_model_parameters(
     location: str,
 ) -> None:
     model_types = {
+        "bipartite_graph_bpr": BipartiteGraphBPR,
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,
@@ -227,7 +229,7 @@ def _validated_model_parameters(
         "kg_walk_rec": KGWalkRec,
     }
     validated_params = dict(params)
-    if name in {"implicit_mf", "confidence_als"}:
+    if name in {"implicit_mf", "confidence_als", "bipartite_graph_bpr"}:
         validated_params.setdefault("seed", seed)
     try:
         model_types[name](**validated_params)
@@ -265,10 +267,12 @@ def _parse_model(
         "sequential_markov",
         "sequential_backoff",
         "kg_walk_rec",
+        "bipartite_graph_bpr",
     }:
         raise ConfigurationError(
             f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
-            "ease, slim_elastic, user_knn, sequential_markov, sequential_backoff, or kg_walk_rec"
+            "ease, slim_elastic, user_knn, sequential_markov, sequential_backoff, kg_walk_rec, "
+            "or bipartite_graph_bpr"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -302,6 +306,15 @@ def _parse_model(
             "max_interactions",
         },
         "kg_walk_rec": {"hops", "relation_weights", "weighted", "popularity_mix", "max_work_units"},
+        "bipartite_graph_bpr": {
+            "factors",
+            "layers",
+            "epochs",
+            "learning_rate",
+            "regularization",
+            "seed",
+            "max_work_units",
+        },
     }[name]
     _unknown(params, allowed, f"models[{index}].params")
     _validated_model_parameters(name, params, seed=seed, location=f"models[{index}].params")

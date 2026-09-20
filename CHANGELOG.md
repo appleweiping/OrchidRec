@@ -6,6 +6,16 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.18.0] - 2026-09-20
+
+### Added
+
+- Added an original bounded full-batch bipartite graph BPR baseline with
+  train-only normalized user–item propagation, exact reverse-mode gradients,
+  deterministic excluded-positive negative sampling, strict model reload,
+  independent hand and finite-difference oracles, and real experiment/shared
+  benchmark consumers. It is LightGCN-style, not frozen framework/model parity.
+
 ## [0.17.0] - 2026-09-20
 
 ### Added

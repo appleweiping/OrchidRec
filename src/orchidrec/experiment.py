@@ -17,6 +17,7 @@ from orchidrec.metrics import MetricReport, evaluate_ranking
 from orchidrec.models import (
     EASE,
     BaseRecommender,
+    BipartiteGraphBPR,
     ConfidenceALS,
     ImplicitMF,
     ItemKNN,
@@ -127,9 +128,10 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
     """Construct a configured model without fitting it."""
 
     params = dict(parameters)
-    if name in {"implicit_mf", "confidence_als", "side_feature_fm"}:
+    if name in {"implicit_mf", "confidence_als", "side_feature_fm", "bipartite_graph_bpr"}:
         params.setdefault("seed", experiment_seed)
     registry: dict[str, type[BaseRecommender]] = {
+        "bipartite_graph_bpr": BipartiteGraphBPR,
         "popularity": Popularity,
         "confidence_als": ConfidenceALS,
         "ease": EASE,

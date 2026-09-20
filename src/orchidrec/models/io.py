@@ -18,6 +18,7 @@ MAX_MODEL_FILE_BYTES = 256 * 1024 * 1024
 def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     """Construct the registered model declared by a state envelope."""
 
+    from orchidrec.models.bipartite_graph_bpr import BipartiteGraphBPR
     from orchidrec.models.confidence_als import ConfidenceALS
     from orchidrec.models.ease import EASE
     from orchidrec.models.implicit_mf import ImplicitMF
@@ -34,6 +35,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
         raise SerializationError("model state must be a JSON object")
     model_type = state.get("model_type")
     registry: dict[str, type[BaseRecommender]] = {
+        BipartiteGraphBPR.model_type: BipartiteGraphBPR,
         Popularity.model_type: Popularity,
         ConfidenceALS.model_type: ConfidenceALS,
         EASE.model_type: EASE,

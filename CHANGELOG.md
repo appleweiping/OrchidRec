@@ -6,6 +6,17 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.16.0] - 2026-09-20
+
+### Added
+
+- Added `SequentialBackoff`, a bounded deterministic second-order transition
+  recommender with support-weighted first-order fallback, strict timestamp
+  semantics and persisted state. Added hand-counted tests, experiment and
+  shared-split benchmark integration, runnable synthetic examples and model
+  documentation. This is not neural sequential recommendation or whole
+  RecBole-family parity.
+
 ## [0.15.0] - 2026-09-20
 
 ### Added

@@ -22,6 +22,7 @@ from orchidrec.models import (
     ItemKNN,
     Popularity,
     Recommendation,
+    SequentialBackoff,
     SequentialMarkov,
     SideFeatureFM,
     SLIMElastic,
@@ -132,6 +133,7 @@ def build_model(name: str, parameters: dict[str, Any], *, experiment_seed: int) 
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
+        "sequential_backoff": SequentialBackoff,
         "side_feature_fm": SideFeatureFM,
     }
     model_class = registry.get(name)

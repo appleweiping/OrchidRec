@@ -60,6 +60,7 @@ from orchidrec.models import (
     ItemKNN,
     Popularity,
     Recommendation,
+    SequentialBackoff,
     SequentialMarkov,
     SideFeatureFM,
     SLIMElastic,
@@ -202,6 +203,7 @@ __all__ = [
     "SLIMElastic",
     "SamplingConfig",
     "SequenceKeep",
+    "SequentialBackoff",
     "SequentialMarkov",
     "SideFeatureFM",
     "SocialEdge",
@@ -254,4 +256,4 @@ __all__ = [
     "verify_atomic_registry",
 ]
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"

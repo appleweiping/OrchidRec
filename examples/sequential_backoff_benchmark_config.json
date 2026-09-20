@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "seed": 2026,
+  "data": {"path": "interactions.json", "format": "orchidrec-json", "minimum_rating": null},
+  "split": {"method": "leave_one_out", "test_ratio": 0.2},
+  "evaluation": {"k": 3, "exclude_seen": true, "bootstrap_samples": 20, "confidence": 0.9},
+  "models": [
+    {"label": "markov", "name": "sequential_markov", "params": {}},
+    {"label": "backoff", "name": "sequential_backoff", "params": {"backoff_strength": 2.0}}
+  ]
+}

@@ -385,6 +385,15 @@ with a declared popularity prior. Missing timestamps are rejected because an
 unordered table cannot support an honest sequential model. Input order is the
 documented deterministic tie-break for equal timestamps.
 
+### SequentialBackoff
+
+Learns second-order item transitions and blends them with first-order
+transitions according to the observed context support. It needs timestamps,
+uses only the fitted training partition, and backs off to popularity for a
+new user or unknown last-item transition. See
+[the model guide](docs/sequential-backoff.md) for its exact score, temporal
+evaluation caveat, bounds, and runnable benchmark.
+
 ## Top-K behavior
 
 All models share the same ranking implementation:
@@ -616,6 +625,7 @@ values fail early. Supported model parameters are:
 | `slim_elastic` | `l1`, `l2`, `max_sweeps`, `tolerance`, `max_items`, `max_interactions`, `max_work_units` |
 | `user_knn` | `neighbors`, `shrinkage` |
 | `sequential_markov` | `weighted`, `popularity_mix` |
+| `sequential_backoff` | `weighted`, `backoff_strength`, `popularity_mix`, `max_interactions` |
 | `side_feature_fm` | `factors`, `epochs`, `learning_rate`, `regularization`, `seed`, `max_work_units` |
 
 When a seeded latent model's `seed` is absent, the experiment-level seed is used.
@@ -726,7 +736,8 @@ fields. Neither runner changes Python's process-global random state.
 - MovieLens rating thresholding discards lower ratings rather than learning
   from them, and this toolkit does not predict explicit star ratings.
 - ItemKNN uses dense per-user pair enumeration, UserKNN builds pairwise user
-  similarities, SequentialMarkov holds a sparse transition table, ImplicitMF
+  similarities, SequentialMarkov and SequentialBackoff hold sparse transition
+  tables, ImplicitMF
   uses simple SGD, ConfidenceALS solves many small systems, EASE performs a
   dense cubic factorization, and SLIMElastic uses bounded dense coordinate
   descent in pure Python rather than optimized native kernels.

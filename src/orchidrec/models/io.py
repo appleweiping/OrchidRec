@@ -23,6 +23,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
     from orchidrec.models.implicit_mf import ImplicitMF
     from orchidrec.models.item_knn import ItemKNN
     from orchidrec.models.popularity import Popularity
+    from orchidrec.models.sequential_backoff import SequentialBackoff
     from orchidrec.models.sequential_markov import SequentialMarkov
     from orchidrec.models.side_feature_fm import SideFeatureFM
     from orchidrec.models.slim_elastic import SLIMElastic
@@ -39,6 +40,7 @@ def model_from_state(state: Mapping[str, Any]) -> BaseRecommender:
         ImplicitMF.model_type: ImplicitMF,
         UserKNN.model_type: UserKNN,
         SequentialMarkov.model_type: SequentialMarkov,
+        SequentialBackoff.model_type: SequentialBackoff,
         SLIMElastic.model_type: SLIMElastic,
         SideFeatureFM.model_type: SideFeatureFM,
     }

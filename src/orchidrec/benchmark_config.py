@@ -19,6 +19,7 @@ from orchidrec.models import (
     ImplicitMF,
     ItemKNN,
     Popularity,
+    SequentialBackoff,
     SequentialMarkov,
     SLIMElastic,
     UserKNN,
@@ -215,6 +216,7 @@ def _validated_model_parameters(
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
+        "sequential_backoff": SequentialBackoff,
     }
     validated_params = dict(params)
     if name in {"implicit_mf", "confidence_als"}:
@@ -253,10 +255,11 @@ def _parse_model(
         "slim_elastic",
         "user_knn",
         "sequential_markov",
+        "sequential_backoff",
     }:
         raise ConfigurationError(
             f"models[{index}].name must be popularity, item_knn, implicit_mf, confidence_als, "
-            "ease, slim_elastic, user_knn, or sequential_markov"
+            "ease, slim_elastic, user_knn, sequential_markov, or sequential_backoff"
         )
     params = _object(model.get("params", {}), f"models[{index}].params")
     allowed = {
@@ -283,6 +286,12 @@ def _parse_model(
         },
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
+        "sequential_backoff": {
+            "weighted",
+            "backoff_strength",
+            "popularity_mix",
+            "max_interactions",
+        },
     }[name]
     _unknown(params, allowed, f"models[{index}].params")
     _validated_model_parameters(name, params, seed=seed, location=f"models[{index}].params")

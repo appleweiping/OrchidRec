@@ -199,11 +199,12 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "implicit_mf",
         "user_knn",
         "sequential_markov",
+        "sequential_backoff",
         "side_feature_fm",
     }:
         raise ConfigurationError(
             "model.name must be popularity, item_knn, implicit_mf, confidence_als, ease, "
-            "slim_elastic, user_knn, sequential_markov, or side_feature_fm"
+            "slim_elastic, user_knn, sequential_markov, sequential_backoff, or side_feature_fm"
         )
     params = _object(model.get("params", {}), "model.params")
     allowed_params = {
@@ -230,6 +231,12 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         },
         "user_knn": {"neighbors", "shrinkage"},
         "sequential_markov": {"weighted", "popularity_mix"},
+        "sequential_backoff": {
+            "weighted",
+            "backoff_strength",
+            "popularity_mix",
+            "max_interactions",
+        },
         "side_feature_fm": {
             "factors",
             "epochs",
@@ -246,6 +253,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         ImplicitMF,
         ItemKNN,
         Popularity,
+        SequentialBackoff,
         SequentialMarkov,
         SideFeatureFM,
         SLIMElastic,
@@ -261,6 +269,7 @@ def config_from_dict(payload: Mapping[str, Any], *, base_dir: str | Path = ".") 
         "implicit_mf": ImplicitMF,
         "user_knn": UserKNN,
         "sequential_markov": SequentialMarkov,
+        "sequential_backoff": SequentialBackoff,
         "side_feature_fm": SideFeatureFM,
     }
     try:

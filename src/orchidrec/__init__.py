@@ -91,6 +91,17 @@ from orchidrec.recbole_network import (
     load_recbole_network,
     save_recbole_network,
 )
+from orchidrec.recbole_registry import (
+    AtomicFileProvenance,
+    AtomicRegistryManifest,
+    NamedAtomicDataset,
+    NamespaceOverlap,
+    RegisteredAtomicDataset,
+    RegistryLimits,
+    register_atomic_datasets,
+    save_atomic_registry,
+    verify_atomic_registry,
+)
 from orchidrec.recbole_side import (
     LoadedRecBoleSideFeatures,
     RecBoleSideLimits,
@@ -128,6 +139,8 @@ __all__ = [
     "PAD_INDEX",
     "SAMPLER_REGISTRY",
     "UNKNOWN_INDEX",
+    "AtomicFileProvenance",
+    "AtomicRegistryManifest",
     "AtomicSource",
     "BenchmarkConfig",
     "BenchmarkDataConfig",
@@ -172,6 +185,8 @@ __all__ = [
     "LoadedSocialNetwork",
     "MetricReport",
     "ModelTuningResult",
+    "NamedAtomicDataset",
+    "NamespaceOverlap",
     "NetworkCatalogReference",
     "NetworkLimits",
     "NetworkSource",
@@ -180,6 +195,8 @@ __all__ = [
     "Popularity",
     "RecBoleSideLimits",
     "Recommendation",
+    "RegisteredAtomicDataset",
+    "RegistryLimits",
     "SamplingConfig",
     "SequenceKeep",
     "SequentialMarkov",
@@ -216,9 +233,11 @@ __all__ = [
     "paired_comparison_from_draws",
     "popularity_exposure",
     "random_split",
+    "register_atomic_datasets",
     "run_benchmark",
     "run_experiment",
     "sample_candidates",
+    "save_atomic_registry",
     "save_benchmark_config",
     "save_benchmark_reports",
     "save_encoded_features",
@@ -228,6 +247,7 @@ __all__ = [
     "save_recbole_side_features",
     "temporal_split",
     "uniform_exposure",
+    "verify_atomic_registry",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"

@@ -33,6 +33,13 @@ from orchidrec.recbole_knowledge import (
     save_recbole_knowledge,
 )
 from orchidrec.recbole_network import NetworkLimits, import_recbole_network, save_recbole_network
+from orchidrec.recbole_registry import (
+    NamedAtomicDataset,
+    RegistryLimits,
+    register_atomic_datasets,
+    save_atomic_registry,
+    verify_atomic_registry,
+)
 from orchidrec.recbole_side import (
     RecBoleSideLimits,
     import_recbole_side_features,
@@ -114,6 +121,23 @@ def _parser() -> argparse.ArgumentParser:
     for name, default in NetworkLimits().to_state().items():
         network.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
 
+    for command, help_text in (
+        ("register-recbole-datasets", "snapshot named local atomic dataset families"),
+        ("verify-recbole-registry", "recompute and verify an atomic registry record"),
+    ):
+        registry = subparsers.add_parser(command, help=help_text)
+        registry.add_argument("--dataset", action="append", required=True, metavar="NAME=DIRECTORY")
+        registry.add_argument(
+            "--minimum-rating", action="append", default=[], metavar="NAME=THRESHOLD"
+        )
+        registry.add_argument(
+            "--registry" if command == "register-recbole-datasets" else "--record",
+            type=Path,
+            required=True,
+        )
+        for name, default in RegistryLimits().to_state().items():
+            registry.add_argument(f"--{name.replace('_', '-')}", type=int, default=default)
+
     fit_features = subparsers.add_parser(
         "fit-features",
         help="fit a typed preprocessing pipeline from training-only feature rows",
@@ -190,6 +214,30 @@ def _parse_cli_id(raw: str) -> EntityId:
     except json.JSONDecodeError:
         value = raw
     return validate_entity_id(value, "user_id")
+
+
+def _registry_inputs(args: argparse.Namespace) -> tuple[list[NamedAtomicDataset], RegistryLimits]:
+    limits = RegistryLimits(**{name: getattr(args, name) for name in RegistryLimits().to_state()})
+    thresholds: dict[str, float] = {}
+    for raw in args.minimum_rating:
+        if "=" not in raw:
+            raise ValidationError("--minimum-rating must be NAME=THRESHOLD")
+        name, value = raw.split("=", 1)
+        if name in thresholds:
+            raise ValidationError(f"duplicate --minimum-rating for {name}")
+        try:
+            thresholds[name] = float(value)
+        except ValueError as error:
+            raise ValidationError(f"invalid --minimum-rating for {name}") from error
+    specs = []
+    for raw in args.dataset:
+        if "=" not in raw:
+            raise ValidationError("--dataset must be NAME=DIRECTORY")
+        name, directory = raw.split("=", 1)
+        specs.append(NamedAtomicDataset(name, Path(directory), thresholds.get(name)))
+    if set(thresholds) - {spec.name for spec in specs}:
+        raise ValidationError("--minimum-rating names must refer to declared datasets")
+    return specs, limits
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -424,6 +472,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
             return 0
+        if args.command in {"register-recbole-datasets", "verify-recbole-registry"}:
+            specs, registry_limits = _registry_inputs(args)
+            if args.command == "register-recbole-datasets":
+                manifest = register_atomic_datasets(specs, limits=registry_limits)
+                output = save_atomic_registry(manifest, args.registry)
+                print(
+                    json.dumps(
+                        {
+                            "registry_id": manifest.registry_id,
+                            "datasets": [dataset.name for dataset in manifest.datasets],
+                            "output": str(output),
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return 0
+            valid = verify_atomic_registry(args.record, specs, limits=registry_limits)
+            print(json.dumps({"valid": valid, "record": str(args.record)}, sort_keys=True))
+            return 0 if valid else 2
         if args.command == "fit-features":
             _require_distinct_paths({"input": args.input, "output": args.output})
             limits = _feature_limits(args)

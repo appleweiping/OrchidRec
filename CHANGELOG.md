@@ -6,6 +6,19 @@ Notable changes are recorded here. Versions follow semantic versioning.
 
 _No changes yet._
 
+## [0.13.0] - 2026-09-19
+
+### Added
+
+- Bounded local registry for multiple named RecBole-style atomic dataset
+  directories. It composes `.inter`, `.user`, `.item`, `.kg`, `.link`, and `.net`
+  adapters into a staged, checksummed manifest with deterministic dataset
+  names, exact source-byte provenance, namespace-specific overlap reports,
+  no-overwrite publication, and reimport verification.
+- Added a two-dataset synthetic example, register/verify CLI commands, and
+  independent/adversarial tests. This remains a narrow local interchange
+  registry, not the full RecBole loading, filtering, model, or dataloader stack.
+
 ## [0.12.0] - 2026-09-19
 
 ### Added

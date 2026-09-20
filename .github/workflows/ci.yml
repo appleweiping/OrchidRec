@@ -79,6 +79,9 @@ jobs:
         name: Run RecBole interaction benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/recbole-benchmark-config.json --output-dir artifacts/ci-recbole-benchmark
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        name: Run bounded atomic dataset registry smoke test
+        run: uv run --locked orchidrec register-recbole-datasets --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --registry artifacts/ci-registries
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         name: Run sampled shared-split benchmark smoke test
         run: uv run --locked orchidrec benchmark examples/sampled_benchmark_config.json --output-dir artifacts/ci-sampled-benchmark
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
@@ -118,5 +121,7 @@ jobs:
           .ci-wheel-check/bin/orchidrec import-recbole-features --user examples/recbole-side-synthetic.user --item examples/recbole-side-synthetic.item --output artifacts/ci-wheel-recbole-side.json
           .ci-wheel-check/bin/orchidrec import-recbole-knowledge --kg examples/recbole-knowledge-synthetic.kg --link examples/recbole-knowledge-synthetic.link --inter examples/recbole-synthetic.inter --minimum-rating 4 --side-features artifacts/ci-wheel-recbole-side.json --output artifacts/ci-wheel-recbole-knowledge.json
           .ci-wheel-check/bin/orchidrec import-recbole-network --net examples/recbole-network-synthetic.net --inter examples/recbole-synthetic.inter --minimum-rating 4 --output artifacts/ci-wheel-recbole-network.json
+          .ci-wheel-check/bin/orchidrec register-recbole-datasets --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --registry artifacts/ci-wheel-registries
+          .ci-wheel-check/bin/orchidrec verify-recbole-registry --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --record "$(find artifacts/ci-wheel-registries -maxdepth 1 -name '*.json' -print -quit)"
           .ci-wheel-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/ci-wheel-feature-pipeline.json
           .ci-wheel-check/bin/orchidrec transform-features --pipeline artifacts/ci-wheel-feature-pipeline.json --input examples/features-validation.json --output artifacts/ci-wheel-features-encoded.json

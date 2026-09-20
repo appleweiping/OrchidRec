@@ -1,0 +1,4 @@
+user_id:token	item_id:token	rating:float	timestamp:float
+u1	i1	5	100
+u2	u1	4	101
+u2	i1	2	102

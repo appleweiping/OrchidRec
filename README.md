@@ -80,9 +80,17 @@ overlap. The [`.net` edge guide](docs/recbole-network.md) documents a separate
 strict directed-edge snapshot and optional `.inter` user overlap. Neither
 adapter adds a social or knowledge-aware model or the full RecBole registry.
 
+The [local atomic dataset registry](docs/recbole-registry.md) composes those
+adapters across explicitly named directories into one content-addressed,
+no-overwrite manifest. It checks file-family structure and reports
+namespace-specific overlap without silently dropping cold IDs. This is an
+interchange/provenance slice, not RecBole's loader, filtering pipeline, or model
+registry.
+
 ```bash
 orchidrec dataset-summary examples/recbole-synthetic.inter --format recbole-inter --minimum-rating 4
 orchidrec benchmark examples/recbole-benchmark-config.json --output-dir artifacts/recbole-demo
+orchidrec register-recbole-datasets --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --registry artifacts/registries
 ```
 
 ## Real MovieLens benchmark

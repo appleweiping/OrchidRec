@@ -66,6 +66,8 @@ jobs:
           .release-wheel-check/bin/orchidrec import-recbole-features --user examples/recbole-side-synthetic.user --item examples/recbole-side-synthetic.item --output artifacts/release-wheel-recbole-side.json
           .release-wheel-check/bin/orchidrec import-recbole-knowledge --kg examples/recbole-knowledge-synthetic.kg --link examples/recbole-knowledge-synthetic.link --inter examples/recbole-synthetic.inter --minimum-rating 4 --side-features artifacts/release-wheel-recbole-side.json --output artifacts/release-wheel-recbole-knowledge.json
           .release-wheel-check/bin/orchidrec import-recbole-network --net examples/recbole-network-synthetic.net --inter examples/recbole-synthetic.inter --minimum-rating 4 --output artifacts/release-wheel-recbole-network.json
+          .release-wheel-check/bin/orchidrec register-recbole-datasets --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --registry artifacts/release-wheel-registries
+          .release-wheel-check/bin/orchidrec verify-recbole-registry --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --record "$(find artifacts/release-wheel-registries -maxdepth 1 -name '*.json' -print -quit)"
           .release-wheel-check/bin/orchidrec run examples/ease_config.json
           .release-wheel-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/release-wheel-feature-pipeline.json
           .release-wheel-check/bin/orchidrec transform-features --pipeline artifacts/release-wheel-feature-pipeline.json --input examples/features-validation.json --output artifacts/release-wheel-features-encoded.json
@@ -80,6 +82,8 @@ jobs:
           .release-sdist-check/bin/orchidrec import-recbole-features --user examples/recbole-side-synthetic.user --item examples/recbole-side-synthetic.item --output artifacts/release-sdist-recbole-side.json
           .release-sdist-check/bin/orchidrec import-recbole-knowledge --kg examples/recbole-knowledge-synthetic.kg --link examples/recbole-knowledge-synthetic.link --inter examples/recbole-synthetic.inter --minimum-rating 4 --side-features artifacts/release-sdist-recbole-side.json --output artifacts/release-sdist-recbole-knowledge.json
           .release-sdist-check/bin/orchidrec import-recbole-network --net examples/recbole-network-synthetic.net --inter examples/recbole-synthetic.inter --minimum-rating 4 --output artifacts/release-sdist-recbole-network.json
+          .release-sdist-check/bin/orchidrec register-recbole-datasets --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --registry artifacts/release-sdist-registries
+          .release-sdist-check/bin/orchidrec verify-recbole-registry --dataset alpha=examples/registry/alpha --minimum-rating alpha=3 --dataset beta=examples/registry/beta --record "$(find artifacts/release-sdist-registries -maxdepth 1 -name '*.json' -print -quit)"
           .release-sdist-check/bin/orchidrec run examples/ease_config.json
           .release-sdist-check/bin/orchidrec fit-features --input examples/features-train.json --output artifacts/release-sdist-feature-pipeline.json
           .release-sdist-check/bin/orchidrec transform-features --pipeline artifacts/release-sdist-feature-pipeline.json --input examples/features-validation.json --output artifacts/release-sdist-features-encoded.json
